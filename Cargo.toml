@@ -1,0 +1,71 @@
+[package]
+name = "mrly-math"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "The designs: codes, cells, cubes and hexagons, their counts, graphs and names, digit designs on the line, and wheels."
+readme = "README.md"
+include = ["src/**", "bridge.toml", "manifest.json", "README.md", "LICENSE"]
+
+[features]
+js = ["mrly-core/js", "dep:wasm-bindgen", "dep:js-sys"]
+py = ["mrly-core/py", "dep:pyo3"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+mrly-core.workspace = true
+mrly-num.workspace = true
+wasm-bindgen = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+pyo3 = { version = "0.29", features = ["abi3-py310"], optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[workspace]
+members = ["js", "py", "cli"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/mrlyprod/math"
+homepage = "https://mrly.net"
+rust-version = "1.96"
+keywords = ["mathematics", "fractal", "cellular-automata", "generative"]
+categories = ["mathematics", "science", "multimedia::images"]
+
+[workspace.lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.test]
+opt-level = 1
+
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+strip = true
+
+[workspace.dependencies]
+mrly-math = { path = ".", version = "0.2.0" }
+mrly-core = "0.2.0"
+mrly-num = "0.2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+wasm-bindgen = "=0.2.125"
+serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
