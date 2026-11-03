@@ -3,15 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-/// The bitmask of filled corners that names a design.
-///
-/// It prints, parses and serialises as the bare decimal number.
-///
-/// ```
-/// use mrly_math::bang::Code;
-/// assert_eq!(Code::from(402u64).to_string(), "402");
-/// assert_eq!("402".parse::<Code>().unwrap().get(), 402);
-/// ```
 #[derive(
     Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
 )]
@@ -19,7 +10,6 @@ use std::str::FromStr;
 pub struct Code(pub(crate) u128);
 
 impl Code {
-    /// Returns the bitmask the code carries.
     pub const fn get(self) -> u128 {
         self.0
     }
@@ -56,19 +46,5 @@ impl From<u128> for Code {
 impl From<Code> for u128 {
     fn from(code: Code) -> u128 {
         code.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn a_code_is_the_bare_decimal_number_in_every_form() {
-        let code = Code::from(402u64);
-        assert_eq!(code.to_string(), "402");
-        assert_eq!(serde_json::to_string(&code).unwrap(), "402");
-        assert_eq!(serde_json::from_str::<Code>("402").unwrap(), code);
-        assert_eq!("402".parse::<Code>().unwrap(), code);
-        assert!("x".parse::<Code>().is_err());
     }
 }

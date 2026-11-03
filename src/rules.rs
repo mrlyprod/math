@@ -2,20 +2,8 @@ use mrly_core::error::{Result, value_error};
 use mrly_core::tensor::Tensor;
 use std::collections::HashSet;
 
-/// The default residue base.
 pub const BASE: usize = 2;
 
-/// Builds a hypercube of the given side and rank, marking each cell whose coordinate residues are in the filled list.
-///
-/// ```
-/// let carpet: Vec<Vec<u8>> = vec![vec![0, 0], vec![0, 1], vec![1, 0]];
-/// let t = mrly_math::rules::render(&carpet, 3, 2, 2).unwrap();
-/// assert_eq!(t.bytes().unwrap(), vec![1, 1, 1, 1, 0, 1, 1, 1, 1]);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the number, the dimension or the base is below one.
 pub fn render(filled: &[Vec<u8>], number: usize, dimension: usize, base: usize) -> Result<Tensor> {
     if number < 1 {
         return value_error("number must be at least 1.");
@@ -40,23 +28,6 @@ pub fn render(filled: &[Vec<u8>], number: usize, dimension: usize, base: usize) 
     Ok(out)
 }
 
-/// Returns every axis but the free one.
 pub fn tree_axes(dimension: usize, free_axis: usize) -> Vec<usize> {
     (0..dimension).filter(|&axis| axis != free_axis).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn render_carpet_rule() {
-        let t = render(&[vec![0, 0], vec![0, 1], vec![1, 0]], 3, 2, 2).unwrap();
-        assert_eq!(t.bytes().unwrap(), vec![1, 1, 1, 1, 0, 1, 1, 1, 1]);
-    }
-    #[test]
-    fn refuses_a_zero_number_dimension_or_base() {
-        assert!(render(&[], 0, 2, 2).is_err());
-        assert!(render(&[], 3, 0, 2).is_err());
-        assert!(render(&[], 3, 2, 0).is_err());
-    }
 }

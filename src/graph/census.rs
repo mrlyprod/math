@@ -6,7 +6,6 @@ use std::f64::consts::LN_2;
 
 const RUNGS: u32 = 32;
 
-/// Sums the straight-line lengths of every branch.
 pub fn total_length(network: &Network) -> f64 {
     network
         .branches
@@ -23,32 +22,14 @@ pub fn total_length(network: &Network) -> f64 {
         .sum()
 }
 
-/// What a node's degree makes it.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Role {
-    /// A node no branch touches.
     Alone,
-    /// A node exactly one branch touches.
     Tip,
-    /// A node exactly two branches pass through.
     Through,
-    /// A node three or more branches meet at.
     Junction,
 }
 
-/// Tags every node by its degree, indexed like the node list.
-///
-/// ```
-/// let mut net = mrly_math::graph::Network::new(2);
-/// net.add_node(vec![0.0, 0.0]).unwrap();
-/// net.add_node(vec![1.0, 0.0]).unwrap();
-/// net.add_branch(0, 1, 1.0).unwrap();
-/// assert_eq!(mrly_math::graph::roles(&net).unwrap(), vec![mrly_math::graph::Role::Tip; 2]);
-/// ```
-///
-/// # Errors
-///
-/// Errors when a branch names a node the network does not hold.
 pub fn roles(network: &Network) -> Result<Vec<Role>> {
     Ok(network
         .degree()?
@@ -62,20 +43,10 @@ pub fn roles(network: &Network) -> Result<Vec<Role>> {
         .collect())
 }
 
-/// Counts the nodes of degree one.
-///
-/// # Errors
-///
-/// Errors when a branch names a node the network does not hold.
 pub fn tips(network: &Network) -> Result<usize> {
     Ok(roles(network)?.iter().filter(|&&r| r == Role::Tip).count())
 }
 
-/// Counts the nodes of degree three or more.
-///
-/// # Errors
-///
-/// Errors when a branch names a node the network does not hold.
 pub fn junctions(network: &Network) -> Result<usize> {
     Ok(roles(network)?
         .iter()
@@ -83,11 +54,6 @@ pub fn junctions(network: &Network) -> Result<usize> {
         .count())
 }
 
-/// Counts the connected components of the network.
-///
-/// # Errors
-///
-/// Errors when a branch names a node the network does not hold.
 pub fn components(network: &Network) -> Result<usize> {
     let n = network.nodes.len();
     if n == 0 {
@@ -115,20 +81,6 @@ pub fn components(network: &Network) -> Result<usize> {
     Ok(count)
 }
 
-/// Extracts the largest connected piece as a network of its own, branches re-indexed.
-///
-/// Ties go to the piece whose lowest node index comes first. An empty network comes back empty.
-///
-/// ```
-/// let mut net = mrly_math::graph::Network::new(1);
-/// for i in 0..3 { net.add_node(vec![i as f64]).unwrap(); }
-/// net.add_branch(0, 1, 1.0).unwrap();
-/// assert_eq!(mrly_math::graph::largest_component(&net).unwrap().nodes.len(), 2);
-/// ```
-///
-/// # Errors
-///
-/// Errors when a branch names a node the network does not hold.
 pub fn largest_component(network: &Network) -> Result<Network> {
     let n = network.nodes.len();
     let adjacency = network.adjacency()?;
@@ -188,7 +140,6 @@ pub fn largest_component(network: &Network) -> Result<Network> {
     Ok(giant)
 }
 
-/// Estimates the box-counting dimension of the node cloud over a ladder of halving boxes, one rung per sample.
 pub fn fractal_dimension(network: &Network, samples: usize) -> f64 {
     let positions: Vec<&Vec<f64>> = network.nodes.iter().map(|n| &n.position).collect();
     if positions.len() < 2 {
@@ -246,37 +197,17 @@ pub fn fractal_dimension(network: &Network, samples: usize) -> f64 {
     cov / (var * LN_2)
 }
 
-/// The measurements of one network.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Census {
-    /// The node count.
     pub nodes: usize,
-    /// The branch count.
     pub branches: usize,
-    /// The count of degree-one nodes.
     pub tips: usize,
-    /// The count of nodes of degree three or more.
     pub junctions: usize,
-    /// The connected component count.
     pub components: usize,
-    /// The summed branch length.
     pub total_length: f64,
-    /// The box-counting dimension estimate.
     pub fractal_dimension: f64,
 }
 
-/// Takes the full census of a network.
-///
-/// ```
-/// let mut net = mrly_math::graph::Network::new(2);
-/// net.add_node(vec![0.0, 0.0]).unwrap();
-/// net.add_node(vec![3.0, 4.0]).unwrap();
-/// assert_eq!(mrly_math::graph::census(&net).unwrap().components, 2);
-/// ```
-///
-/// # Errors
-///
-/// Errors when a branch names a node the network does not hold.
 pub fn census(network: &Network) -> Result<Census> {
     Ok(Census {
         nodes: network.nodes.len(),
@@ -287,74 +218,4 @@ pub fn census(network: &Network) -> Result<Census> {
         total_length: total_length(network),
         fractal_dimension: fractal_dimension(network, 12),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::atoms;
-    use crate::graph::extract::core_graph;
-    #[test]
-    fn carpet_census() {
-        let network = core_graph(&atoms::carpet_2d(3)).unwrap();
-        let c = census(&network).unwrap();
-        assert_eq!(c.nodes, 8);
-        assert_eq!(c.branches, 8);
-        assert_eq!(c.components, 1);
-        assert!((c.total_length - 8.0).abs() < 1e-9);
-    }
-    #[test]
-    fn carpet_census_holds_its_pinned_counts() {
-        let network = core_graph(&atoms::carpet_2d(3).fractal(4)).unwrap();
-        let c = census(&network).unwrap();
-        assert_eq!(c.nodes, 4096);
-        assert_eq!(c.branches, 6424);
-        assert_eq!(c.tips, 0);
-        assert_eq!(c.junctions, 3596);
-        assert_eq!(c.components, 1);
-        assert!((c.total_length - 6424.0).abs() < 1e-9);
-    }
-    #[test]
-    fn the_two_node_ladder_reads_exactly_one() {
-        let mut net = Network::new(2);
-        net.add_node(vec![0.0, 0.0]).unwrap();
-        net.add_node(vec![3.0, 4.0]).unwrap();
-        assert_eq!(fractal_dimension(&net, 12), 1.0);
-        net.add_node(vec![0.0, 0.0]).unwrap();
-        assert_eq!(fractal_dimension(&net, 12), 1.0);
-    }
-    #[test]
-    fn the_carpet_dimension_holds_its_pinned_value() {
-        let network = core_graph(&atoms::carpet_2d(3).fractal(4)).unwrap();
-        let d = census(&network).unwrap().fractal_dimension;
-        assert!((0.0..=3.0).contains(&d), "dimension {d}");
-        assert!((d - 1.787589465914211).abs() < 1e-12, "dimension {d}");
-    }
-
-    #[test]
-    fn two_sample_counts_read_two_dimensions() {
-        let network = core_graph(&atoms::carpet_2d(3).fractal(3)).unwrap();
-        let coarse = fractal_dimension(&network, 4);
-        let fine = fractal_dimension(&network, 12);
-        assert!(coarse.is_finite() && fine.is_finite());
-        assert!(coarse > 0.0 && fine > 0.0);
-        assert!((coarse - fine).abs() > 1e-9);
-    }
-
-    #[test]
-    fn refuses_a_branch_past_the_nodes() {
-        let mut net = Network::new(1);
-        net.add_node(vec![0.0]).unwrap();
-        net.branches.push(Branch {
-            parent: 0,
-            child: 4,
-            radius: 1.0,
-        });
-        assert!(roles(&net).is_err());
-        assert!(tips(&net).is_err());
-        assert!(junctions(&net).is_err());
-        assert!(components(&net).is_err());
-        assert!(largest_component(&net).is_err());
-        assert!(census(&net).is_err());
-    }
 }

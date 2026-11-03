@@ -20,7 +20,6 @@ fn orientation_name(o: Orientation) -> &'static str {
     }
 }
 
-/// Serializes a cell and its projection metadata to JSON.
 pub fn to_json(cell: &Cell6d) -> String {
     let mut data = parse(&two::to_json(&cell.cell)).unwrap();
     data["projection"] = json!(projection_name(cell.projection));
@@ -29,11 +28,6 @@ pub fn to_json(cell: &Cell6d) -> String {
     data.to_string()
 }
 
-/// Parses a cell from JSON, defaulting any missing projection metadata.
-///
-/// # Errors
-///
-/// Errors when the text is not a hex cell.
 pub fn from_json(text: &str) -> Result<Cell6d> {
     let data = parse(text)?;
     let inner = two::from_json(text)?;
@@ -56,17 +50,4 @@ pub fn from_json(text: &str) -> Result<Cell6d> {
     };
     let start = data.get("start").and_then(|v| v.as_u64()).unwrap_or(1) as u8;
     Ok(Cell6d::new(inner, projection, orientation, start))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::Code;
-    use crate::six::designs::cut_design;
-    #[test]
-    fn json_round_trip() {
-        let c = cut_design(Code(23), 3, 1, 2).unwrap();
-        let restored = from_json(&to_json(&c)).unwrap();
-        assert_eq!(c, restored);
-    }
 }

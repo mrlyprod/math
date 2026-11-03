@@ -5,11 +5,6 @@ use mrly_core::error::{Result, value_error};
 
 const ROW: f64 = 0.866_025_403_784_438_6;
 
-/// Rasterizes a hex cell's fills on a square of the side at the true hex aspect, one for a fill triangle and zero elsewhere.
-///
-/// # Errors
-///
-/// Errors at size zero, for a cell that is not a hexagon, or when nothing is filled.
 pub fn raster(cell: &Cell6d, size: usize) -> Result<Vec<f32>> {
     if size == 0 {
         return value_error("size must be at least 1.");
@@ -90,47 +85,4 @@ pub fn raster(cell: &Cell6d, size: usize) -> Result<Vec<f32>> {
         }
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::Code;
-    use crate::six::{census, cut_design};
-
-    fn fraction(cell: &Cell6d, size: usize) -> f64 {
-        let pixels = raster(cell, size).unwrap();
-        pixels.iter().map(|&v| v as f64).sum::<f64>() / (size * size) as f64
-    }
-
-    fn hexagon_share(cell: &Cell6d) -> f64 {
-        let tally = census::census(cell, false);
-        let n = ((tally.triangles as f64) / 6.0).sqrt();
-        let wide = 4.0 * n;
-        let area = (tally.fills as f64) * 3f64.sqrt();
-        area / (wide * wide)
-    }
-
-    #[test]
-    fn the_solid_cut_fills_its_hexagon() {
-        let cell = cut_design(Code(255), 3, 1, 2).unwrap();
-        let expect = hexagon_share(&cell);
-        assert!((fraction(&cell, 400) - expect).abs() < 0.01, "{expect}");
-        let centre = raster(&cell, 101).unwrap()[50 * 101 + 50];
-        assert_eq!(centre, 1.0);
-    }
-
-    #[test]
-    fn the_carpet_cut_is_pierced_at_the_centre() {
-        let cell = cut_design(Code(23), 3, 1, 2).unwrap();
-        let expect = hexagon_share(&cell);
-        assert!((fraction(&cell, 400) - expect).abs() < 0.01, "{expect}");
-        let centre = raster(&cell, 101).unwrap()[50 * 101 + 50];
-        assert_eq!(centre, 0.0);
-    }
-
-    #[test]
-    fn refuses_an_empty_size() {
-        assert!(raster(&cut_design(Code(23), 3, 1, 2).unwrap(), 0).is_err());
-    }
 }

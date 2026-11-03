@@ -1,16 +1,6 @@
-//! The chaos game of a design: the shift register that writes its digits backwards, the de Bruijn schedules that paint every cell once, the restricted games that draw the memory dial's sets, and the games on a graph that draw a mosaic or a slice.
-//!
-//! A design at base `b` has one map per digit, `phi_d(x) = (x + d) / b`, and the game plays `x_n = phi_(d_n)(x_(n-1))` from a start in `[0, 1)^D`.
-//! Each draw becomes the new leading digit, so for `n >= k` the level-`k` cell of `x_n` is the word of the last `k` draws read newest first.
-//! A corner is the integer `c = sum_i d_i b^i`, coordinate `0` its least significant digit, the `c = x + b y` of the plane designs, and a cell index is row major, `y side + x` at `side = b^k`, as [`crate::memory::cells`] reads it.
-//! A restricted game is a rule of [`crate::memory`] on the draws in time order, the oldest draw the most significant digit of the window, and the set it draws is the dial's set of the reversed rule.
-//! A game on a graph keeps a state, draws an edge into it, plays the edge's digit and moves to the edge's source: the mosaic game on its slots, the slice game on its carry heights.
-
 use crate::memory::{Rule, SWEEPS, TOLERANCE};
 use mrly_core::error::{Result, overflow_error, value_error};
 use serde::{Deserialize, Serialize};
-
-// THE SHIFT REGISTER
 
 fn power(base: u8, digits: u32) -> Result<u64> {
     if base < 2 {
@@ -31,31 +21,10 @@ fn digits(dimension: u32, level: u32) -> Result<u32> {
     }
 }
 
-/// Returns the count of level-`k` cells of the cube, `b^(D k)`.
-///
-/// ```
-/// assert_eq!(mrly_math::game::cells(2, 2, 3).unwrap(), 64);
-/// ```
-///
-/// # Errors
-///
-/// Errs under base two, and when the count runs past a `u64`.
 pub fn cells(base: u8, dimension: u8, level: u32) -> Result<u64> {
     power(base, digits(u32::from(dimension), level)?)
 }
 
-/// Returns the index of the level-`k` cell holding a point of `[0, 1)^D`: `floor(x b^k) + floor(y b^k) b^k + ...`, row major with coordinate `0` least significant, the dimension read off the point.
-///
-/// At level one the index is the corner the point sits in. A coordinate outside the cube is clamped to its nearest cell.
-///
-/// ```
-/// assert_eq!(mrly_math::game::cell(&[0.3, 0.6], 2, 1).unwrap(), 2);
-/// assert_eq!(mrly_math::game::cell(&[0.3, 0.6], 2, 2).unwrap(), 9);
-/// ```
-///
-/// # Errors
-///
-/// Errs under base two, and when the cell count runs past a `u64`.
 pub fn cell(point: &[f64], base: u8, level: u32) -> Result<u64> {
     let side = power(base, level)?;
     power(base, digits(point.len() as u32, level)?)?;
@@ -70,15 +39,6 @@ pub fn cell(point: &[f64], base: u8, level: u32) -> Result<u64> {
     Ok(index)
 }
 
-/// Returns the cell of a word of corners read coarsest digit first, the cell the game lands in after playing the word's digits last letter first.
-///
-/// ```
-/// assert_eq!(mrly_math::game::word_cell(&[1, 2], 2, 2).unwrap(), 6);
-/// ```
-///
-/// # Errors
-///
-/// Errs under base two or dimension one, at a corner past `b^D`, and when the cell count runs past a `u64`.
 pub fn word_cell(word: &[u8], base: u8, dimension: u8) -> Result<u64> {
     if dimension < 1 {
         return value_error("dimension must be at least one.");
@@ -108,9 +68,6 @@ pub fn word_cell(word: &[u8], base: u8, dimension: u8) -> Result<u64> {
     Ok(index)
 }
 
-// PERFECT PAINTING
-
-/// The longest lap a de Bruijn cycle may run, in letters.
 pub const LAP: u64 = 1 << 24;
 
 fn lyndon(t: usize, p: usize, k: usize, m: usize, word: &mut [usize], out: &mut Vec<u8>) {
@@ -128,17 +85,6 @@ fn lyndon(t: usize, p: usize, k: usize, m: usize, word: &mut [usize], out: &mut 
     }
 }
 
-/// Returns a de Bruijn cycle of order `k` over `m` letters: `m^k` letters in which every word of length `k` occurs exactly once as a cyclic window, so played as the draw schedule of an `m`-digit design it paints every level-`k` cell once per lap, and from a cold start once in `m^k + k - 1` draws.
-///
-/// The cycle concatenates the Lyndon words over `{0, ..., m - 1}` whose length divides `k`, in lexicographic order, the construction of Fredricksen, Kessler and Maiorana.
-///
-/// ```
-/// assert_eq!(mrly_math::game::de_bruijn(2, 3).unwrap(), vec![0, 0, 0, 1, 0, 1, 1, 1]);
-/// ```
-///
-/// # Errors
-///
-/// Errs when `m` or `k` is zero, when `m` passes the `256` letters a byte holds, and when `m^k` passes [`LAP`].
 pub fn de_bruijn(m: u32, k: u32) -> Result<Vec<u8>> {
     if m == 0 || k == 0 {
         return value_error("a de Bruijn cycle needs at least one letter and order one.");
@@ -158,18 +104,6 @@ pub fn de_bruijn(m: u32, k: u32) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-// RESTRICTED GAMES
-
-/// Returns the rule whose windows are the rule's windows read backwards.
-///
-/// A restricted game allows a window of draws in time order, oldest first, and the digits of its point are the draws newest first, so the set a game draws is the dial's set of the reversed rule: [`crate::memory::cells`] of the reverse are the game's cells, and the two share their Perron root, their transfer matrices being transposes.
-///
-/// ```
-/// use mrly_math::memory::Rule;
-/// let anticlockwise = Rule::new(2, 2, 16770).unwrap();
-/// assert_eq!(mrly_math::game::reverse(&anticlockwise).code, 10260);
-/// assert_eq!(mrly_math::game::reverse(&mrly_math::game::reverse(&anticlockwise)), anticlockwise);
-/// ```
 pub fn reverse(rule: &Rule) -> Rule {
     let mask = rule.letters() - 1;
     let mut code = 0u64;
@@ -192,16 +126,6 @@ pub fn reverse(rule: &Rule) -> Rule {
     }
 }
 
-/// Returns the letters a restricted game may draw next: the corners `c` for which some allowed window, read in time order, ends in the last `k - 1` draws of the history followed by `c`.
-///
-/// A history shorter than `k - 1` fixes only the end of the window, so the letters consistent with some allowed window are returned, and the empty history at width one reads the rule's alphabet.
-/// A history letter past the rule's corners matches no window.
-///
-/// ```
-/// use mrly_math::memory::Rule;
-/// let no_repeat = Rule::new(2, 2, 31710).unwrap();
-/// assert_eq!(mrly_math::game::successors(&no_repeat, &[0]), vec![1, 2, 3]);
-/// ```
 pub fn successors(rule: &Rule, history: &[u8]) -> Vec<u8> {
     let letters = rule.letters();
     let tail_len = history.len().min(rule.width - 1);
@@ -224,16 +148,11 @@ pub fn successors(rule: &Rule, history: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-/// A restricted game of the base-2 square with a name: a rule of [`crate::memory`] in time order, oldest draw most significant.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NamedGame {
-    /// The name the game is known by.
     pub name: String,
-    /// The dimension of the rule, two on the square.
     pub dimension: usize,
-    /// The window width `k`, one more than the memory.
     pub width: usize,
-    /// The window code, bit `w` set when the time-ordered window `w` is allowed; a `u128` so a width-3 code crosses the bridge as a decimal string.
     pub code: u128,
 }
 
@@ -262,12 +181,6 @@ fn square(width: usize, keep: impl Fn(&[u8]) -> bool) -> u64 {
     code
 }
 
-/// Returns the named games of the square, corner `c = x + 2 y`, cyclic order `0, 1, 3, 2` anticlockwise with `y` up: the seven one-step games and the width-3 game that forbids a neighbour after a repeat.
-///
-/// ```
-/// let games = mrly_math::game::named_games();
-/// assert_eq!((games[0].name.as_str(), games[0].code), ("no repeat", 31710));
-/// ```
 pub fn named_games() -> Vec<NamedGame> {
     let games: [(&str, usize, u64); 8] = [
         ("no repeat", 2, square(2, |w| w[1] != w[0])),
@@ -309,8 +222,6 @@ pub fn named_games() -> Vec<NamedGame> {
         })
         .collect()
 }
-
-// GAMES ON A GRAPH
 
 fn order(matrix: &[Vec<u64>]) -> Result<usize> {
     let n = matrix.len();
@@ -382,19 +293,6 @@ fn component_root(block: &[Vec<f64>]) -> f64 {
     0.5 * (low + high)
 }
 
-/// Returns the Perron root of a square nonnegative integer matrix, the growth per level of the paths its graph counts.
-///
-/// The graph is split into its strongly connected components; a component carrying no cycle contributes nothing, and a matrix with no cycle reads exactly `0`.
-/// On each cyclic component `I + B` is primitive, so the power iteration on it converges to the Perron vector, and the Collatz-Wielandt ratios of that vector bracket the root; the answer is the largest component root.
-///
-/// ```
-/// let golden = vec![vec![1, 1], vec![1, 0]];
-/// assert!((mrly_math::game::perron(&golden).unwrap() - 1.618_033_988_749_895).abs() < 1e-12);
-/// ```
-///
-/// # Errors
-///
-/// Errs when the matrix is not square.
 pub fn perron(matrix: &[Vec<u64>]) -> Result<f64> {
     let n = order(matrix)?;
     let reach = reachability(matrix);
@@ -419,16 +317,6 @@ pub fn perron(matrix: &[Vec<u64>]) -> Result<f64> {
     Ok(best)
 }
 
-/// Returns the path counts from a state, `e_start M^L 1` for `L = 1 ..= levels`: the filled cells of a mosaic slot or of a slice at each level, and stops early on the level whose count overruns a `u64`.
-///
-/// ```
-/// let golden = vec![vec![1, 1], vec![1, 0]];
-/// assert_eq!(mrly_math::game::counts(&golden, 0, 5).unwrap(), vec![2, 3, 5, 8, 13]);
-/// ```
-///
-/// # Errors
-///
-/// Errs when the matrix is not square, and when the start is not one of its states.
 pub fn counts(matrix: &[Vec<u64>], start: usize, levels: usize) -> Result<Vec<u64>> {
     let n = order(matrix)?;
     if start >= n {
@@ -461,50 +349,21 @@ fn exponent(rho: f64, base: u8) -> f64 {
     rho.log(f64::from(base))
 }
 
-/// A mosaic: one mask per palette slot, each filled corner of a slot's mask naming the slot it sends to.
-///
-/// Slot `t` at level `L + 1` is slot `t`'s mask with every filled corner `(d, u)` replaced by slot `u` at level `L`, so the filled cells of slot `t` at level `L` count `e_t S^L 1` with `S` the substitution matrix.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mosaic {
-    /// The base `b`, the digits per axis.
     pub base: u8,
-    /// The dimension `D` of the cube.
     pub dimension: u8,
-    /// The masks, one per slot: the filled corners `c = sum_i d_i b^i` of the slot, each with the slot it sends to.
     pub masks: Vec<Vec<(u8, u8)>>,
 }
 
-/// The chaos game of a mosaic: the graph-directed game on its slots.
-///
-/// The game keeps a slot `v`, draws an edge `(u, d, v)` into it, plays `x -> (x + d) / b` and moves to slot `u`; its limit set from slot `v` is the slot-`v` set of the mosaic.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MosaicGame {
-    /// The substitution matrix: entry `(u, v)` counts the corners of mask `u` sending to slot `v`.
     pub matrix: Vec<Vec<u64>>,
-    /// The Perron root of the substitution matrix.
     pub rho: f64,
-    /// The Hausdorff dimension `log_b rho` on a strongly connected slot graph, `-inf` when nothing grows.
     pub dimension: f64,
-    /// The edges `(from slot, corner, to slot)`, one per filled corner of every mask.
     pub edges: Vec<(u8, u8, u8)>,
 }
 
-/// Reads the game of a mosaic: its substitution matrix, Perron root, dimension and edges.
-///
-/// ```
-/// let mosaic = mrly_math::game::Mosaic {
-///     base: 2,
-///     dimension: 2,
-///     masks: vec![vec![(0, 0), (1, 1), (2, 0)], vec![(0, 1), (3, 0)]],
-/// };
-/// let game = mrly_math::game::mosaic_game(&mosaic).unwrap();
-/// assert_eq!(game.matrix, vec![vec![2, 1], vec![1, 1]]);
-/// assert_eq!(format!("{:.6}", game.dimension), "1.388484");
-/// ```
-///
-/// # Errors
-///
-/// Errs under base two or dimension one, with no mask or more than `256`, at a corner past `b^D` or repeated in its mask, and at a slot past the masks.
 pub fn mosaic_game(mosaic: &Mosaic) -> Result<MosaicGame> {
     if mosaic.base < 2 {
         return value_error(format!("base {} is under two.", mosaic.base));
@@ -548,23 +407,13 @@ pub fn mosaic_game(mosaic: &Mosaic) -> Result<MosaicGame> {
     })
 }
 
-/// The chaos game of a plane design cut by the line `x + y = p / q`: the graph-directed game on its carry heights.
-///
-/// A corner `d` carries the weight `w(d) = d_x + d_y`, and the slice of the set at height `h` is the union over the corners of `phi_d` of the slice at height `b h - w(d)`, so the heights reachable from `p / q` inside the hull `[min w, max w] / (b - 1)` are the states, finitely many at a rational height, and the heights with no way on are dropped.
-/// The game keeps a height, draws an edge into it, plays the edge's corner and moves to the edge's source height; its limit set from the start is the slice.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SliceGame {
-    /// The live heights as reduced fractions `(numerator, denominator)`, in increasing order.
     pub states: Vec<(i64, i64)>,
-    /// The index of the start height `p / q` in the states, `0` on an empty game.
     pub start: usize,
-    /// The edges `(from state, corner, to state)`, one per corner that carries a live height to a live height.
     pub edges: Vec<(usize, u8, usize)>,
-    /// The carry matrix: entry `(s, t)` counts the corners carrying state `s` to state `t`.
     pub matrix: Vec<Vec<u64>>,
-    /// The Perron root of the carry matrix.
     pub rho: f64,
-    /// The Hausdorff dimension `log_b rho` of the slice, `-inf` when it is empty.
     pub dimension: f64,
 }
 
@@ -583,17 +432,6 @@ fn empty_slice() -> SliceGame {
     }
 }
 
-/// Reads the game of a plane design, corners `c = x + b y`, cut by the line `x + y = p / q`: its carry states, edges, matrix, Perron root and dimension.
-///
-/// ```
-/// let game = mrly_math::game::slice_game(2, &[0, 1, 3], 2, 3).unwrap();
-/// assert_eq!(game.states, vec![(1, 3), (2, 3), (4, 3), (5, 3)]);
-/// assert_eq!(format!("{:.6}", game.dimension), "0.694242");
-/// ```
-///
-/// # Errors
-///
-/// Errs under base two, at a corner past `b^2` or repeated, at a zero `q`, and when a height overruns an `i64`.
 pub fn slice_game(base: u8, digits: &[u8], p: i64, q: i64) -> Result<SliceGame> {
     if base < 2 {
         return value_error(format!("base {base} is under two."));
@@ -691,357 +529,4 @@ pub fn slice_game(base: u8, digits: &[u8], p: i64, q: i64) -> Result<SliceGame> 
         rho,
         dimension: exponent(rho, base),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::memory;
-    use crate::round_trip;
-    use std::collections::BTreeSet;
-
-    const PHI: f64 = 1.618_033_988_749_895;
-
-    fn corner_vector(c: u8, base: u8, dimension: u8) -> Vec<u8> {
-        (0..dimension)
-            .map(|i| (c / base.pow(u32::from(i))) % base)
-            .collect()
-    }
-
-    fn play(start: &[f64], draws: &[u8], base: u8) -> Vec<f64> {
-        let mut point = start.to_vec();
-        for &d in draws {
-            let digits = corner_vector(d, base, point.len() as u8);
-            for (x, &digit) in point.iter_mut().zip(&digits) {
-                *x = (*x + f64::from(digit)) / f64::from(base);
-            }
-        }
-        point
-    }
-
-    #[test]
-    fn the_cell_of_a_point_is_the_reversed_last_draws() {
-        let starts = [0.37, 0.21, 0.13];
-        for (base, dimension) in [(2u8, 1u8), (2, 2), (3, 2), (2, 3)] {
-            let corners = base.pow(u32::from(dimension));
-            let start = &starts[..usize::from(dimension)];
-            let mut words: Vec<Vec<u8>> = vec![Vec::new()];
-            for _ in 0..4 {
-                words = words
-                    .iter()
-                    .flat_map(|w| {
-                        (0..corners).map(move |c| {
-                            let mut next = w.clone();
-                            next.push(c);
-                            next
-                        })
-                    })
-                    .collect();
-                for draws in &words {
-                    let point = play(start, draws, base);
-                    for k in 1..=draws.len() {
-                        let reversed: Vec<u8> =
-                            draws[draws.len() - k..].iter().rev().copied().collect();
-                        assert_eq!(
-                            cell(&point, base, k as u32).unwrap(),
-                            word_cell(&reversed, base, dimension).unwrap(),
-                            "base {base} dim {dimension} draws {draws:?} level {k}"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn word_cells_are_the_memory_dials_cells() {
-        for code in [7u64, 11, 13, 14, 9] {
-            let rule = Rule::new(2, 1, code).unwrap();
-            let corners: Vec<u8> = (0..4u8).filter(|&c| (code >> c) & 1 == 1).collect();
-            for level in 1..=4u32 {
-                let mut words: Vec<Vec<u8>> = vec![Vec::new()];
-                for _ in 0..level {
-                    words = words
-                        .iter()
-                        .flat_map(|w| {
-                            corners.iter().map(move |&c| {
-                                let mut next = w.clone();
-                                next.push(c);
-                                next
-                            })
-                        })
-                        .collect();
-                }
-                let mut mine: Vec<u64> =
-                    words.iter().map(|w| word_cell(w, 2, 2).unwrap()).collect();
-                mine.sort_unstable();
-                let mut theirs = memory::cells(&rule, level as usize);
-                theirs.sort_unstable();
-                assert_eq!(mine, theirs, "code {code} level {level}");
-            }
-        }
-    }
-
-    #[test]
-    fn cells_count_the_grid_and_refuse_an_overrun() {
-        assert_eq!(cells(2, 2, 3).unwrap(), 64);
-        assert_eq!(cells(3, 2, 2).unwrap(), 81);
-        assert_eq!(cells(2, 3, 21).unwrap(), 1 << 63);
-        assert!(cells(2, 3, 22).is_err());
-        assert!(cells(1, 2, 1).is_err());
-        assert!(cell(&[0.5, 0.5], 2, 32).is_err());
-        assert_eq!(cell(&[-1.0, 2.0], 2, 2).unwrap(), 12);
-        assert!(word_cell(&[4], 2, 2).is_err());
-        assert!(word_cell(&[0], 2, 0).is_err());
-    }
-
-    #[test]
-    fn de_bruijn_cycles_hold_every_window_once() {
-        for (m, k) in [
-            (2u32, 1u32),
-            (2, 2),
-            (2, 3),
-            (2, 4),
-            (3, 1),
-            (3, 2),
-            (3, 3),
-            (4, 2),
-            (5, 2),
-        ] {
-            let cycle = de_bruijn(m, k).unwrap();
-            let length = m.pow(k) as usize;
-            assert_eq!(cycle.len(), length, "m {m} k {k}");
-            assert!(cycle.iter().all(|&c| u32::from(c) < m));
-            let windows: BTreeSet<Vec<u8>> = (0..length)
-                .map(|i| (0..k as usize).map(|j| cycle[(i + j) % length]).collect())
-                .collect();
-            assert_eq!(windows.len(), length, "m {m} k {k}");
-        }
-    }
-
-    #[test]
-    fn de_bruijn_refuses_a_cycle_out_of_range() {
-        assert!(de_bruijn(0, 2).is_err());
-        assert!(de_bruijn(2, 0).is_err());
-        assert!(de_bruijn(257, 1).is_err());
-        assert!(de_bruijn(2, 25).is_err());
-        assert_eq!(de_bruijn(256, 1).unwrap().len(), 256);
-    }
-
-    #[test]
-    fn the_named_games_read_the_census() {
-        let games = named_games();
-        let codes: Vec<u64> = games.iter().map(|g| g.code as u64).collect();
-        assert_eq!(
-            codes[..7],
-            [31710, 48765, 60855, 27030, 38505, 50115, 16770]
-        );
-        let want = [
-            (12, 3.0),
-            (12, 3.0),
-            (12, 3.0),
-            (8, 2.0),
-            (8, 2.0),
-            (8, 2.0),
-            (4, 1.0),
-            (56, 2.0 + 2f64.sqrt()),
-        ];
-        for (game, (windows, rho)) in games.iter().zip(want) {
-            let rule = Rule::new(game.dimension, game.width, game.code as u64).unwrap();
-            assert_eq!(memory::allowed_windows(&rule), windows, "{}", game.name);
-            let root = memory::perron(&reverse(&rule));
-            assert!((root - rho).abs() < 1e-12, "{} reads {root}", game.name);
-            assert!((memory::perron(&rule) - rho).abs() < 1e-12, "{}", game.name);
-        }
-    }
-
-    #[test]
-    fn successors_keep_the_newest_window_allowed() {
-        let games = named_games();
-        let rule = |i: usize| Rule::new(2, games[i].width, games[i].code as u64).unwrap();
-        for a in 0..4u8 {
-            let others: Vec<u8> = (0..4u8).filter(|&b| b != a).collect();
-            assert_eq!(successors(&rule(0), &[3, a]), others);
-            assert_eq!(successors(&rule(6), &[a]), vec![ahead(a, 1)]);
-            let shifted: Vec<u8> = (0..4u8).filter(|&b| b >> 1 == a & 1).collect();
-            assert_eq!(successors(&rule(5), &[a]), shifted);
-            let mut after_repeat = vec![a, ahead(a, 2)];
-            after_repeat.sort_unstable();
-            assert_eq!(successors(&rule(7), &[a, a]), after_repeat);
-            assert_eq!(successors(&rule(7), &[ahead(a, 1), a]), vec![0, 1, 2, 3]);
-            assert_eq!(successors(&rule(7), &[a]), vec![0, 1, 2, 3]);
-        }
-        assert_eq!(successors(&rule(7), &[]), vec![0, 1, 2, 3]);
-        assert_eq!(successors(&Rule::new(2, 1, 7).unwrap(), &[]), vec![0, 1, 2]);
-        assert!(successors(&rule(0), &[4]).is_empty());
-    }
-
-    #[test]
-    fn the_reversed_shift_rule_draws_the_doubling_graph() {
-        let shift = Rule::new(2, 2, 50115).unwrap();
-        let dial = reverse(&shift);
-        assert_eq!(reverse(&dial), shift);
-        for level in 1..=5usize {
-            let side = 1u64 << level;
-            let mut want: Vec<u64> = (0..side)
-                .flat_map(|x| {
-                    let y = (2 * x) % side;
-                    [y * side + x, (y + 1) * side + x]
-                })
-                .collect();
-            want.sort_unstable();
-            let mut drawn = memory::cells(&dial, level);
-            drawn.sort_unstable();
-            assert_eq!(drawn, want, "level {level}");
-        }
-    }
-
-    #[test]
-    fn perron_reads_the_largest_component_root() {
-        assert!((perron(&[vec![0, 1], vec![2, 0]]).unwrap() - 2f64.sqrt()).abs() < 1e-12);
-        assert!((perron(&[vec![1, 0], vec![1, 2]]).unwrap() - 2.0).abs() < 1e-12);
-        assert!(perron(&[vec![0, 1], vec![0, 0]]).unwrap().abs() < 1e-12);
-        assert!((perron(&[vec![3]]).unwrap() - 3.0).abs() < 1e-12);
-        assert_eq!(perron(&[]).unwrap(), 0.0);
-        assert!(perron(&[vec![1, 1]]).is_err());
-    }
-
-    #[test]
-    fn counts_stop_on_an_overrun() {
-        let doubling = vec![vec![1u64 << 40]];
-        assert_eq!(counts(&doubling, 0, 3).unwrap(), vec![1 << 40]);
-        assert!(counts(&doubling, 1, 3).is_err());
-        assert_eq!(
-            counts(&[vec![0, 1], vec![2, 0]], 1, 4).unwrap(),
-            vec![2, 2, 4, 4]
-        );
-    }
-
-    #[test]
-    fn the_two_slot_mosaic_grows_by_the_golden_square() {
-        let mosaic = Mosaic {
-            base: 2,
-            dimension: 2,
-            masks: vec![vec![(0, 0), (1, 1), (2, 0)], vec![(0, 1), (3, 0)]],
-        };
-        let game = mosaic_game(&mosaic).unwrap();
-        assert_eq!(game.matrix, vec![vec![2, 1], vec![1, 1]]);
-        assert!((game.rho - PHI * PHI).abs() < 1e-9);
-        assert_eq!(format!("{:.6}", game.dimension), "1.388484");
-        assert_eq!(
-            counts(&game.matrix, 0, 8).unwrap(),
-            vec![3, 8, 21, 55, 144, 377, 987, 2584]
-        );
-        assert_eq!(
-            game.edges,
-            vec![(0, 0, 0), (0, 1, 1), (0, 2, 0), (1, 0, 1), (1, 3, 0)]
-        );
-    }
-
-    #[test]
-    fn mosaic_game_refuses_a_bad_mask() {
-        let good = Mosaic {
-            base: 2,
-            dimension: 2,
-            masks: vec![vec![(0, 0), (3, 0)]],
-        };
-        assert!(mosaic_game(&good).is_ok());
-        assert!(
-            mosaic_game(&Mosaic {
-                base: 1,
-                ..good.clone()
-            })
-            .is_err()
-        );
-        assert!(
-            mosaic_game(&Mosaic {
-                dimension: 0,
-                ..good.clone()
-            })
-            .is_err()
-        );
-        assert!(
-            mosaic_game(&Mosaic {
-                masks: vec![],
-                ..good.clone()
-            })
-            .is_err()
-        );
-        assert!(
-            mosaic_game(&Mosaic {
-                masks: vec![vec![(4, 0)]],
-                ..good.clone()
-            })
-            .is_err()
-        );
-        assert!(
-            mosaic_game(&Mosaic {
-                masks: vec![vec![(0, 1)]],
-                ..good.clone()
-            })
-            .is_err()
-        );
-        assert!(
-            mosaic_game(&Mosaic {
-                masks: vec![vec![(0, 0), (0, 0)]],
-                ..good
-            })
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn the_gasket_slices_at_two_thirds_carry_the_notes_states() {
-        let light = slice_game(2, &[0, 1, 2], 2, 3).unwrap();
-        assert_eq!(light.states, vec![(1, 3), (2, 3)]);
-        assert_eq!(light.start, 1);
-        assert_eq!(light.matrix, vec![vec![0, 1], vec![2, 0]]);
-        assert!((light.rho - 2f64.sqrt()).abs() < 1e-12);
-        assert!((light.dimension - 0.5).abs() < 1e-12);
-        assert_eq!(light.edges, vec![(1, 1, 0), (1, 2, 0), (0, 0, 1)]);
-        let heavy = slice_game(2, &[0, 1, 3], 2, 3).unwrap();
-        assert_eq!(heavy.states, vec![(1, 3), (2, 3), (4, 3), (5, 3)]);
-        assert_eq!(heavy.start, 1);
-        assert_eq!(
-            heavy.matrix,
-            vec![
-                vec![0, 1, 0, 0],
-                vec![1, 0, 1, 0],
-                vec![0, 1, 0, 1],
-                vec![0, 0, 1, 0]
-            ]
-        );
-        assert!((heavy.rho - PHI).abs() < 1e-12);
-        assert_eq!(format!("{:.6}", heavy.dimension), "0.694242");
-        assert_eq!(
-            counts(&heavy.matrix, heavy.start, 12).unwrap(),
-            vec![2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]
-        );
-    }
-
-    #[test]
-    fn slice_game_refuses_a_bad_cut_and_empties_outside_the_hull() {
-        assert!(slice_game(1, &[0], 1, 2).is_err());
-        assert!(slice_game(2, &[4], 1, 2).is_err());
-        assert!(slice_game(2, &[1, 1], 1, 2).is_err());
-        assert!(slice_game(2, &[0, 1], 1, 0).is_err());
-        let outside = slice_game(2, &[0, 1, 2], 3, 2).unwrap();
-        assert!(outside.states.is_empty());
-        assert_eq!(outside.rho, 0.0);
-        let turned = slice_game(2, &[0, 1, 3], -2, -3).unwrap();
-        assert_eq!(turned.states, vec![(1, 3), (2, 3), (4, 3), (5, 3)]);
-    }
-
-    #[test]
-    fn serde_round_trips() {
-        round_trip(named_games());
-        let mosaic = Mosaic {
-            base: 2,
-            dimension: 2,
-            masks: vec![vec![(0, 0), (1, 1), (2, 0)], vec![(0, 1), (3, 0)]],
-        };
-        round_trip(mosaic_game(&mosaic).unwrap());
-        round_trip(mosaic);
-        round_trip(slice_game(2, &[0, 1, 3], 2, 3).unwrap());
-    }
 }

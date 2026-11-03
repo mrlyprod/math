@@ -3,25 +3,17 @@ use super::{Lattice, Spec};
 use mrly_core::error::{Result, value_error};
 use serde::{Deserialize, Serialize};
 
-/// The recipe for one moire layer.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
-    /// The design to sample.
     pub spec: Spec,
-    /// The side number of the residue grid.
     pub number: usize,
-    /// The fractal depth.
     pub level: usize,
-    /// The sampling lattice.
     pub lattice: Lattice,
-    /// The output side in pixels.
     pub size: usize,
-    /// The 0..1 positions fixing the axes beyond the first two.
     pub slices: Vec<f64>,
 }
 
 impl Layer {
-    /// Builds a layer at level 1 on a 512-pixel square lattice.
     pub fn new(spec: Spec, number: usize) -> Layer {
         Layer {
             spec,
@@ -34,11 +26,6 @@ impl Layer {
     }
 }
 
-/// Samples a design over the pixel grid into a boolean mask.
-///
-/// # Errors
-///
-/// Errors below dimension two, or on a code out of range.
 pub fn layer(params: &Layer) -> Result<Vec<bool>> {
     let Spec {
         code,

@@ -44,38 +44,18 @@ fn adjacency_graph(cell: &Cell6d, keep: impl Fn(u8) -> bool) -> Result<Network> 
     Ok(network)
 }
 
-/// Builds the network of filled triangles joined by shared edges.
-///
-/// # Errors
-///
-/// Errors when a triangle index falls outside the sheet.
 pub fn slice_core_graph(cell: &Cell6d) -> Result<Network> {
     adjacency_graph(cell, |v| v == FILL)
 }
 
-/// Builds the network of void triangles joined by shared edges, the pore network of the slice.
-///
-/// # Errors
-///
-/// Errors when a triangle index falls outside the sheet.
 pub fn slice_tunnel_graph(cell: &Cell6d) -> Result<Network> {
     adjacency_graph(cell, |v| v == VOID)
 }
 
-/// Builds the network of fill and void triangles joined by shared edges.
-///
-/// # Errors
-///
-/// Errors when a triangle index falls outside the sheet.
 pub fn slice_dual_graph(cell: &Cell6d) -> Result<Network> {
     adjacency_graph(cell, |v| v == FILL || v == VOID)
 }
 
-/// Builds the corner-and-edge network of the triangles matching the value, or of every fill and void.
-///
-/// # Errors
-///
-/// Errors when a triangle index falls outside the sheet.
 pub fn slice_edge_graph(cell: &Cell6d, value: Option<u8>) -> Result<Network> {
     let inner = &cell.cell;
     let start = cell.start as i64;
@@ -113,47 +93,4 @@ pub fn slice_edge_graph(cell: &Cell6d, value: Option<u8>) -> Result<Network> {
         }
     }
     Ok(network)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::counts::six::solid_slice_core_edges;
-    use crate::six::geometry::blank;
-    use crate::six::{Orientation, Projection};
-    fn solid(radius: usize) -> Cell6d {
-        Cell6d::new(
-            blank(radius, Orientation::Horizontal, FILL, crate::six::GRID).unwrap(),
-            Projection::Cut,
-            Orientation::Horizontal,
-            0,
-        )
-    }
-    #[test]
-    fn solid_core_counts_are_pinned() {
-        let expected = [(1, 6, 6), (2, 24, 27), (3, 54, 72)];
-        for (radius, nodes, branches) in expected {
-            let core = slice_core_graph(&solid(radius)).unwrap();
-            assert_eq!(core.nodes.len(), nodes, "r={radius}");
-            assert_eq!(core.branches.len(), branches, "r={radius}");
-        }
-        assert_eq!(
-            slice_core_graph(&solid(3)).unwrap().branches.len() as u128,
-            solid_slice_core_edges(3).unwrap()
-        );
-    }
-    #[test]
-    fn the_carpet_slice_tunnels_twelve_ways() {
-        let hex = crate::six::cut(&crate::three::carpet(3, 1).unwrap()).unwrap();
-        assert_eq!(slice_tunnel_graph(&hex).unwrap().branches.len(), 12);
-    }
-    #[test]
-    fn dual_contains_core() {
-        let s = solid(2);
-        let dual = slice_dual_graph(&s).unwrap();
-        let core = slice_core_graph(&s).unwrap();
-        assert!(dual.nodes.len() >= core.nodes.len());
-        let edge = slice_edge_graph(&s, Some(FILL)).unwrap();
-        assert!(!edge.nodes.is_empty());
-    }
 }

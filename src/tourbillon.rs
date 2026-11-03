@@ -15,62 +15,36 @@ const PLANE_CAP: usize = 64_000_000;
 const PERIOD_CAP: usize = 360;
 const TIGHT: f64 = 1e-9;
 
-// THE LAYERS
-
-/// One carpet of a stack: the odd scale it is drawn at, the weight the linear blends carry it at and the turn it takes about the centre, in degrees.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
-    /// The odd scale, the number of cells across the carpet.
     pub scale: usize,
-    /// The weight, scaled so the magnitudes average one.
     pub weight: f64,
-    /// The turn about the centre, in degrees.
     pub degrees: f64,
 }
 
-/// The readings of a spun stack: its layers, the first eight scales and angles, the mean and RMS contrast over the disc, that contrast times the root of the layer count, the exact centre value, whether the blend carries the weights, the span the raster covers, the sites inside the disc and the brightest three.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Stats {
-    /// The count of layers in the stack.
     pub layers: usize,
-    /// The first eight scales.
     pub scales: Vec<usize>,
-    /// The first eight angles, in degrees.
     pub angles: Vec<f64>,
-    /// The mean over the disc.
     pub mean: f64,
-    /// The RMS contrast over the disc.
     pub rms: f64,
-    /// The RMS contrast times the root of the layer count.
     pub faded: f64,
-    /// The exact value at the centre, computed and never sampled.
     pub centre: f64,
-    /// Whether the blend carries the weights.
     pub weighted: bool,
-    /// The smallest value over the disc.
     pub low: f64,
-    /// The largest value over the disc.
     pub high: f64,
-    /// The count of sites inside the disc.
     pub inside: usize,
-    /// The brightest three sites, each as its unit coordinates and its value.
     pub peaks: Vec<[f64; 3]>,
-    /// The least whole number of increments that closes a quarter turn, none past the cap.
     pub period: Option<usize>,
-    /// The count of distinct angle classes the layers fall in, read a quarter turn apart.
     pub classes: usize,
-    /// The count of layer pairs sharing an angle class.
     pub pairs: usize,
 }
 
-/// One angle of the quarter-turn lattice: the turn in degrees and the ninety a over q that names it.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Eye {
-    /// The turn in degrees.
     pub angle: f64,
-    /// The numerator, ninety times a.
     pub numer: usize,
-    /// The denominator q.
     pub denom: usize,
 }
 
@@ -78,17 +52,6 @@ fn golden() -> f64 {
     180.0 * (3.0 - 5f64.sqrt())
 }
 
-// THE QUARTER TURN
-
-/// The angles a quarter turn shares with itself: ninety a over q for every q up to the cap and every a from zero to four q coprime to it, sorted by angle.
-///
-/// The odd carpet is unchanged by a quarter turn, so two layers whose angles agree modulo ninety stand on one exact lattice of nodes and the stack stops moving there.
-///
-/// ```
-/// let list = mrly_math::tourbillon::eyes(2);
-/// assert_eq!(list.len(), 9);
-/// assert_eq!(list[1].angle, 45.0);
-/// ```
 pub fn eyes(qmax: usize) -> Vec<Eye> {
     let mut out = Vec::new();
     for denom in 1..=qmax {
@@ -107,12 +70,6 @@ pub fn eyes(qmax: usize) -> Vec<Eye> {
     out
 }
 
-/// The least whole number of increments that closes a quarter turn, none once the count passes the cap.
-///
-/// ```
-/// assert_eq!(mrly_math::tourbillon::period(18.0), Some(5));
-/// assert_eq!(mrly_math::tourbillon::period(1.0), Some(90));
-/// ```
 pub fn period(increment: f64) -> Option<usize> {
     (1..=PERIOD_CAP).find(|count| {
         let turns = *count as f64 * increment / 90.0;
@@ -125,7 +82,6 @@ fn quarter(degrees: f64) -> f64 {
     if 90.0 - angle <= TIGHT { 0.0 } else { angle }
 }
 
-/// The angle classes of a stack read a quarter turn apart: how many the layers fall in, and how many layer pairs share one.
 pub fn sharing(list: &[Layer]) -> (usize, usize) {
     let mut angles: Vec<f64> = list.iter().map(|layer| quarter(layer.degrees)).collect();
     angles.sort_by(f64::total_cmp);
@@ -198,13 +154,6 @@ fn weight_of(scale: usize, weights: &str) -> Result<f64> {
     }
 }
 
-/// The layers of a stack: every scale one, three, five up to the top the set keeps, each with its weight and its angle.
-///
-/// The schedule is unspun, degrees, golden, primes, random or gaussian, the layer set is odd, primes, squarefree or prime powers and the weights are plain, mobius or harmonic. The weights are rescaled so their magnitudes sum to the layer count, so the mean blend stays paper coverage and the sum blend stays the inked layer count.
-///
-/// # Errors
-///
-/// Errors at an even top or one out of range, or for a schedule, set or weights name the stack does not know.
 pub fn layers(
     top: usize,
     schedule: &str,
@@ -273,8 +222,6 @@ fn sample(list: &[Layer], blend: Blend) -> Vec<f32> {
         })
         .collect()
 }
-
-// THE RASTER
 
 fn disc(size: usize) -> Vec<bool> {
     let mut out = vec![false; size * size];
@@ -363,13 +310,6 @@ fn corners(layer: &Layer, size: usize, inside: &[bool], mark: &mut [u8]) {
     }
 }
 
-/// Rasters the layers onto a square of the size, every one turned about the centre by its own angle and masked to the inscribed disc, then merged site by site.
-///
-/// The render mode is cells, the lit squares of the carpet, edges, the boundaries between its cells, or corners, the vertices of its lit squares. The weights ride on the layers under the linear blends only. Sites outside the disc are NaN.
-///
-/// # Errors
-///
-/// Errors for a mode that is not cells, edges or corners, or a raster past the site budget.
 pub fn stack(list: &[Layer], size: usize, mode: &str, blend: Blend) -> Result<Vec<f32>> {
     if !["cells", "edges", "corners"].contains(&mode) {
         return value_error(format!(
@@ -466,15 +406,6 @@ fn peaks(field: &[f32], size: usize, top: usize) -> Vec<[f64; 3]> {
     out
 }
 
-// THE STACK
-
-/// Spins the odd parity carpets at the scales one, three, five up to the top into one stack on a square of the size, every layer turned about the centre by its own angle and masked to the inscribed disc, so every pixel sees every layer.
-///
-/// The schedule is unspun, degrees, golden, primes, random or gaussian, the layer set is odd, primes, squarefree or prime powers, the weights are plain, mobius or harmonic, the render mode is cells, edges or corners and the blend is mean, sum, union, meet, parity or difference. The weights are scaled to average magnitude one and apply only under the linear blends, so mean is paper coverage and sum is the inked layer count. Sites outside the disc are NaN.
-///
-/// # Errors
-///
-/// Errors at a raster or top out of range, or for a schedule, set, weights or blend name the stack does not know.
 #[allow(clippy::too_many_arguments)]
 pub fn field(
     top: usize,
@@ -493,13 +424,6 @@ pub fn field(
     stack(&list, size, mode, blend)
 }
 
-/// Reads a spun stack against the schedule that made it: the layer count, the first eight scales and angles, the mean and RMS contrast over the disc, that contrast times the root of the layer count, the exact centre value, whether the blend carries the weights, the span the raster covers and the brightest three sites.
-///
-/// The centre is computed from the layers at the exact half-half point, never sampled off the raster, so no turn of the layers moves it.
-///
-/// # Errors
-///
-/// Errors when the field is not size by size, or a name the stack does not know.
 #[allow(clippy::too_many_arguments)]
 pub fn stats(
     field: &[f32],
@@ -551,158 +475,4 @@ pub fn stats(
         classes,
         pairs,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_schedule_keeps_the_odd_scales_and_turns_them_by_the_primes() {
-        let odd = layers(55, "primes", 0.0, "odd", "plain", 1).unwrap();
-        assert_eq!(odd.len(), 28);
-        let scales: Vec<usize> = odd.iter().take(SHOWN).map(|layer| layer.scale).collect();
-        assert_eq!(scales, vec![1, 3, 5, 7, 9, 11, 13, 15]);
-        let angles: Vec<f64> = odd.iter().take(SHOWN).map(|layer| layer.degrees).collect();
-        assert_eq!(angles, vec![0.0, 2.0, 3.0, 5.0, 7.0, 11.0, 13.0, 17.0]);
-        assert_eq!(
-            layers(199, "unspun", 0.0, "primes", "plain", 1)
-                .unwrap()
-                .len(),
-            45
-        );
-        let counts: Vec<usize> = ["odd", "primes", "squarefree", "prime powers"]
-            .iter()
-            .map(|set| layers(55, "unspun", 0.0, set, "plain", 1).unwrap().len())
-            .collect();
-        assert_eq!(counts, vec![28, 15, 23, 19]);
-        assert!(layers(54, "unspun", 0.0, "odd", "plain", 1).is_err());
-        assert!(layers(201, "unspun", 0.0, "odd", "plain", 1).is_err());
-        assert!(layers(55, "spiral", 0.0, "odd", "plain", 1).is_err());
-        assert!(layers(55, "unspun", 0.0, "even", "plain", 1).is_err());
-        assert!(layers(55, "unspun", 0.0, "odd", "zeta", 1).is_err());
-    }
-
-    #[test]
-    fn the_unspun_stack_counts_eighteen_layers_at_its_brightest() {
-        let list = layers(55, "unspun", 0.0, "odd", "plain", 1).unwrap();
-        let raster = stack(&list, 512, "cells", Blend::Sum).unwrap();
-        assert_eq!(raster.len(), 512 * 512);
-        let high = raster
-            .iter()
-            .filter(|value| !value.is_nan())
-            .cloned()
-            .fold(f32::NEG_INFINITY, f32::max);
-        assert_eq!(high, 18.0);
-        assert!(raster[0].is_nan());
-        let read = stats(&raster, 512, 55, "unspun", 0.0, "odd", "plain", "sum", 1).unwrap();
-        assert_eq!((read.high, read.low), (18.0, 0.0));
-        assert!(stack(&list, 512, "dots", Blend::Sum).is_err());
-    }
-
-    #[test]
-    fn the_field_and_the_stats_hold_the_centre_at_half_the_layers() {
-        let raster = field(55, 512, "unspun", 0.0, "odd", "plain", "cells", "mean", 1).unwrap();
-        let read = stats(&raster, 512, 55, "unspun", 0.0, "odd", "plain", "mean", 1).unwrap();
-        assert_eq!(read.layers, 28);
-        assert_eq!(read.centre, 14.0 / 28.0);
-        assert_eq!(format!("{:.6}", read.high), format!("{:.6}", 18.0 / 28.0));
-        assert!(read.weighted);
-        let counted = stats(&raster, 512, 55, "unspun", 0.0, "odd", "plain", "sum", 1).unwrap();
-        assert_eq!(counted.centre, 14.0);
-        let folded = stats(&raster, 512, 55, "unspun", 0.0, "odd", "plain", "parity", 1).unwrap();
-        assert_eq!(folded.centre, 0.0);
-        assert!(!folded.weighted);
-        assert!(field(55, 4096, "unspun", 0.0, "odd", "plain", "cells", "mean", 1).is_err());
-        assert!(field(55, 512, "unspun", 0.0, "odd", "plain", "cells", "blur", 1).is_err());
-        assert!(stats(&raster, 256, 55, "unspun", 0.0, "odd", "plain", "mean", 1).is_err());
-        let odd = field(51, 64, "unspun", 0.0, "odd", "plain", "cells", "sum", 1).unwrap();
-        assert_eq!(
-            stats(&odd, 64, 51, "unspun", 0.0, "odd", "plain", "sum", 1)
-                .unwrap()
-                .centre,
-            13.0
-        );
-        assert_eq!(
-            stats(&odd, 64, 51, "unspun", 0.0, "odd", "plain", "parity", 1)
-                .unwrap()
-                .centre,
-            1.0
-        );
-    }
-
-    #[test]
-    fn no_turn_of_the_layers_moves_the_centre() {
-        let centre = |schedule: &str, increment: f64| {
-            let raster = field(
-                55, 64, schedule, increment, "odd", "plain", "cells", "mean", 1,
-            )
-            .unwrap();
-            stats(
-                &raster, 64, 55, schedule, increment, "odd", "plain", "mean", 1,
-            )
-            .unwrap()
-            .centre
-        };
-        for step in 0..8 {
-            assert_eq!(centre("degrees", f64::from(step)), 14.0 / 28.0);
-        }
-        for schedule in ["golden", "primes", "random", "gaussian"] {
-            assert_eq!(centre(schedule, 0.0), 14.0 / 28.0);
-        }
-    }
-
-    #[test]
-    fn the_three_modes_read_the_same_layers_apart() {
-        let shares: Vec<String> = ["cells", "edges", "corners"]
-            .iter()
-            .map(|mode| {
-                let raster =
-                    field(55, 256, "golden", 0.0, "odd", "plain", mode, "mean", 1).unwrap();
-                let read =
-                    stats(&raster, 256, 55, "golden", 0.0, "odd", "plain", "mean", 1).unwrap();
-                format!("{:.6}", read.mean)
-            })
-            .collect();
-        assert_eq!(shares.join(" "), "0.231722 0.111924 0.141211");
-    }
-
-    #[test]
-    fn the_quarter_turn_lattice_lists_its_angles_smallest_first() {
-        let list = eyes(12);
-        assert_eq!(list.len(), 185);
-        let first: Vec<String> = list
-            .iter()
-            .take(8)
-            .map(|eye| format!("{:.6}", eye.angle))
-            .collect();
-        assert_eq!(
-            first.join(" "),
-            "0.000000 7.500000 8.181818 9.000000 10.000000 11.250000 12.857143 15.000000"
-        );
-        assert_eq!((list[1].numer, list[1].denom), (90, 12));
-        assert!(list.windows(2).all(|pair| pair[0].angle <= pair[1].angle));
-    }
-
-    #[test]
-    fn a_ninetieth_increment_folds_the_layers_into_angle_classes() {
-        let read = |increment: f64, schedule: &str| {
-            let raster = field(
-                55, 64, schedule, increment, "odd", "plain", "cells", "mean", 1,
-            )
-            .unwrap();
-            stats(
-                &raster, 64, 55, schedule, increment, "odd", "plain", "mean", 1,
-            )
-            .unwrap()
-        };
-        let coarse = read(18.0, "degrees");
-        assert_eq!(coarse.period, Some(5));
-        assert_eq!((coarse.classes, coarse.pairs), (5, 65));
-        let fine = read(7.5, "degrees");
-        assert_eq!(fine.period, Some(12));
-        assert_eq!(fine.classes, 12);
-        let loose = read(0.0, "golden");
-        assert_eq!((loose.classes, loose.pairs), (28, 0));
-    }
 }

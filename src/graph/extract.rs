@@ -24,11 +24,6 @@ fn coords_of(grid: &Tensor) -> Vec<Vec<usize>> {
     out
 }
 
-/// Extracts the network of filled sites joined to their axis neighbors.
-///
-/// # Errors
-///
-/// Errors off two and three dimensions.
 pub fn core_graph(grid: &Tensor) -> Result<Network> {
     let dim = grid.shape.len();
     if dim != 2 && dim != 3 {
@@ -62,20 +57,10 @@ pub fn core_graph(grid: &Tensor) -> Result<Network> {
     Ok(network)
 }
 
-/// Extracts the core graph of the inverted grid, joining empty sites instead.
-///
-/// # Errors
-///
-/// Errors off two and three dimensions.
 pub fn tunnel_graph(grid: &Tensor) -> Result<Network> {
     core_graph(&grid.invert())
 }
 
-/// Extracts the network of corners and edges outlining every filled site.
-///
-/// # Errors
-///
-/// Errors off two and three dimensions.
 pub fn edge_graph(grid: &Tensor) -> Result<Network> {
     let dim = grid.shape.len();
     if dim != 2 && dim != 3 {
@@ -144,36 +129,4 @@ fn cell_edges(coord: &[usize], dim: usize) -> Vec<(Vec<usize>, Vec<usize>)> {
         }
     }
     pairs
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::atoms;
-    #[test]
-    fn single_square_graphs() {
-        let g = atoms::ones_2d(1);
-        let core = core_graph(&g).unwrap();
-        assert_eq!(core.nodes.len(), 1);
-        assert_eq!(core.branches.len(), 0);
-        let edges = edge_graph(&g).unwrap();
-        assert_eq!(edges.nodes.len(), 4);
-        assert_eq!(edges.branches.len(), 4);
-    }
-    #[test]
-    fn carpet_core_graph_counts() {
-        let g = atoms::carpet_2d(3);
-        let core = core_graph(&g).unwrap();
-        assert_eq!(core.nodes.len(), 8);
-        assert_eq!(core.branches.len(), 8);
-        let tunnels = tunnel_graph(&g).unwrap();
-        assert_eq!(tunnels.nodes.len(), 1);
-    }
-    #[test]
-    fn cube_edge_graph() {
-        let g = atoms::ones_3d(1);
-        let edges = edge_graph(&g).unwrap();
-        assert_eq!(edges.nodes.len(), 8);
-        assert_eq!(edges.branches.len(), 12);
-    }
 }

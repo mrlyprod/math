@@ -1,5 +1,3 @@
-#![allow(missing_docs)]
-
 use crate::bang::Code;
 use crate::cell::models::CellNd;
 use crate::six::{Cell6d, Orientation, Projection};
@@ -7,8 +5,6 @@ pub use mrly_core::hand::py::*;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::{Borrowed, IntoPyObjectExt};
-
-// CELLND
 
 pub struct PyCellNd<const N: usize>(pub CellNd<N>);
 
@@ -42,8 +38,6 @@ impl<'py, const N: usize> FromPyObject<'_, 'py> for PyCellNd<N> {
         Ok(PyCellNd(cell_nd_from_py(&obj)?))
     }
 }
-
-// CELL6D
 
 pub struct PyCell6d(pub Cell6d);
 
@@ -91,8 +85,6 @@ impl<'py> FromPyObject<'_, 'py> for PyCell6d {
         Ok(PyCell6d(cell_6d_from_py(&obj)?))
     }
 }
-
-// CODE
 
 pub struct PyCode(pub Code);
 

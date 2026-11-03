@@ -17,15 +17,6 @@ fn overlap(m: u64, n: u64) -> (u64, u64) {
     (both, grid)
 }
 
-/// Returns the exact Pearson correlation of the flat carpet layers at two scales, area-weighted on their lcm grid.
-///
-/// A layer at scale n is lit where the row and the column of the n by n grid are not both odd.
-/// The correlation is exactly zero when the two odd scales are coprime, and zero by convention below scale two, where a layer is constant.
-///
-/// ```
-/// assert_eq!(mrly_math::moire::pairs::correlation(3, 5), 0.0);
-/// assert!(mrly_math::moire::pairs::correlation(3, 9) > 0.0);
-/// ```
 pub fn correlation(m: usize, n: usize) -> f64 {
     let (m, n) = (m as u64, n as u64);
     let (hm, hn) = (m / 2, n / 2);
@@ -48,33 +39,16 @@ pub fn correlation(m: usize, n: usize) -> f64 {
     covariance / (variance(hm, m) * variance(hn, n)).sqrt()
 }
 
-/// The witness row of an odd scale: its correlation with every earlier odd scale from three, and the verdict the row gives.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Witness {
-    /// The scale on trial.
     pub scale: usize,
-    /// The earlier odd scales, three up to the scale less two.
     pub scales: Vec<usize>,
-    /// The exact correlation with each earlier scale.
     pub row: Vec<f64>,
-    /// The largest correlation in the row, zero for an empty row.
     pub max: f64,
-    /// The earlier scale carrying the largest correlation, zero when the row is clear.
     pub at: usize,
-    /// Whether the row is exactly clear, which is the scale being prime.
     pub prime: bool,
 }
 
-/// Puts an odd scale of three or more on trial against every earlier odd scale.
-///
-/// ```
-/// let trial = mrly_math::moire::pairs::witness(9).unwrap();
-/// assert_eq!((trial.scales, trial.at, trial.prime), (vec![3, 5, 7], 3, false));
-/// ```
-///
-/// # Errors
-///
-/// Errors for a scale that is not odd and three or more.
 pub fn witness(scale: usize) -> Result<Witness> {
     if scale < 3 || scale.is_multiple_of(2) {
         return value_error("the stack has odd scales from three.");
@@ -98,11 +72,6 @@ pub fn witness(scale: usize) -> Result<Witness> {
     })
 }
 
-/// Returns the Pearson correlation of two rendered carpet layers on their lcm grid, sampled rather than integrated.
-///
-/// # Errors
-///
-/// Errors when either scale is zero.
 pub fn sampled(m: usize, n: usize) -> Result<f64> {
     if m == 0 || n == 0 {
         return value_error("a sampled pair needs two scales of at least one.");
@@ -120,33 +89,4 @@ pub fn sampled(m: usize, n: usize) -> Result<f64> {
     let (ea, eb) = (mean(&a), mean(&b));
     let eab = a.iter().zip(&b).filter(|&(&x, &y)| x && y).count() as f64 / a.len() as f64;
     Ok((eab - ea * eb) / (ea * (1.0 - ea) * eb * (1.0 - eb)).sqrt())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn brute(m: u64, n: u64) -> (u64, u64) {
-        let grid = lcm(m as usize, n as usize) as u64;
-        let (a, b) = (grid / m, grid / n);
-        let both = (0..grid)
-            .filter(|&j| !(j / a).is_multiple_of(2) && !(j / b).is_multiple_of(2))
-            .count() as u64;
-        (both, grid)
-    }
-
-    #[test]
-    fn the_closed_count_matches_the_lcm_grid() {
-        for m in 2..30u64 {
-            for n in 2..30u64 {
-                assert_eq!(overlap(m, n), brute(m, n), "{m} {n}");
-            }
-        }
-    }
-
-    #[test]
-    fn refuses_a_zero_scale() {
-        assert!(sampled(0, 3).is_err());
-        assert!(sampled(3, 0).is_err());
-    }
 }

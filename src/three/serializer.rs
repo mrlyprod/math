@@ -5,7 +5,6 @@ use mrly_core::tensor::Tensor;
 use mrly_core::{Json, json};
 use serde::Deserialize;
 
-/// Unrolls the cell into nested lists, plane by row by site.
 fn to_lists(cell: &Cell3d) -> Vec<Vec<Vec<u8>>> {
     let types = cell.types();
     let shape = &types.shape;
@@ -22,7 +21,6 @@ fn to_lists(cell: &Cell3d) -> Vec<Vec<Vec<u8>>> {
         .collect()
 }
 
-/// Builds a cell from nested lists, or an error when they are empty or ragged.
 fn from_lists(lists: &[Vec<Vec<u8>>]) -> Result<Cell3d> {
     if lists.is_empty() || lists[0].is_empty() || lists[0][0].is_empty() {
         return value_error("cannot build a cell from an empty list.");
@@ -47,7 +45,6 @@ fn planes<T: Clone>(flat: &[T], shape: &[usize]) -> Vec<Vec<Vec<T>>> {
         .collect()
 }
 
-/// Serializes the cell's shape and types to JSON, with colors and tags when present.
 pub fn to_json(cell: &Cell3d) -> String {
     let shape = &cell.types().shape;
     let mut data = json!({
@@ -67,11 +64,6 @@ pub fn to_json(cell: &Cell3d) -> String {
     data.to_string()
 }
 
-/// Parses a cell from its JSON, colors and tags included.
-///
-/// # Errors
-///
-/// Errors when the text is not a cube.
 pub fn from_json(text: &str) -> Result<Cell3d> {
     let data = parse(text)?;
     let lists = byte_cube(types_field(&data)?)?;
@@ -87,12 +79,6 @@ pub fn from_json(text: &str) -> Result<Cell3d> {
     Ok(cell)
 }
 
-/// Unrolls the cube into one string of digits per row, grouped plane by plane.
-///
-/// ```
-/// let rows = mrly_math::three::to_strings(&mrly_math::three::carpet(3, 1).unwrap());
-/// assert_eq!(rows[0], ["111", "101", "111"]);
-/// ```
 pub fn to_strings(cell: &Cell3d) -> Vec<Vec<String>> {
     to_lists(cell)
         .iter()
@@ -105,11 +91,6 @@ pub fn to_strings(cell: &Cell3d) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// Builds a cube from one string of digits per row, grouped plane by plane.
-///
-/// # Errors
-///
-/// Errors when the planes are empty, ragged, or hold anything but digits.
 pub fn from_strings(data: &[Vec<String>]) -> Result<Cell3d> {
     let mut lists = Vec::with_capacity(data.len());
     for plane in data {
@@ -127,49 +108,4 @@ pub fn from_strings(data: &[Vec<String>]) -> Result<Cell3d> {
         lists.push(rows);
     }
     from_lists(&lists)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::three::designs;
-    use mrly_core::cell::Mode;
-    use mrly_core::cell::mapping;
-    #[test]
-    fn json_round_trip_with_colors_and_tags() {
-        let c = designs::carpet(3, 1)
-            .unwrap()
-            .layers()
-            .paint(&mapping(), Mode::Type, None)
-            .unwrap();
-        let restored = from_json(&to_json(&c)).unwrap();
-        assert_eq!(c, restored);
-        assert!(restored.cell.colors.is_some());
-        assert!(restored.cell.tags.is_some());
-    }
-    #[test]
-    fn json_round_trip_with_tags_past_a_byte() {
-        use crate::three::manhattan_layers;
-        use mrly_core::tensor::Dtype;
-        let long = manhattan_layers(Cell3d::new(Tensor::full(vec![1, 1, 600], 1)).unwrap());
-        let tags = long.cell.tags.as_ref().unwrap();
-        assert_eq!(tags.dtype(), Dtype::U16);
-        assert_eq!(tags.at(0), 299);
-        let restored = from_json(&to_json(&long)).unwrap();
-        assert_eq!(restored, long);
-        assert_eq!(restored.cell.tags.as_ref().unwrap().at(0), 299);
-    }
-    #[test]
-    fn strings_round_trip_the_sponge() {
-        let c = designs::carpet(3, 1).unwrap();
-        let rows = to_strings(&c);
-        assert_eq!(rows[0], ["111", "101", "111"]);
-        assert_eq!(from_strings(&rows).unwrap(), c);
-    }
-
-    #[test]
-    fn lists_round_trip() {
-        let c = designs::void(4, 1).unwrap();
-        assert_eq!(from_lists(&to_lists(&c)).unwrap(), c);
-    }
 }

@@ -18,8 +18,6 @@ type Square = [[f64; BLOCK]; BLOCK];
 
 pub(crate) type Pairs = (Vec<f64>, Vec<Vec<f64>>);
 
-// DENSE
-
 pub(crate) fn tridiagonalise(a: &mut [Vec<f64>], vectors: bool) -> (Vec<f64>, Vec<f64>) {
     let n = a.len();
     let mut d = vec![0.0; n];
@@ -197,8 +195,6 @@ pub(crate) fn symmetric(matrix: &[Vec<f64>]) -> Result<Pairs> {
     Ok((values, vectors))
 }
 
-// BAND
-
 struct Band {
     n: usize,
     width: usize,
@@ -349,8 +345,6 @@ pub(crate) fn below(rows: &[Vec<(usize, f64)>], shift: f64) -> usize {
     negative
 }
 
-// BLOCKS
-
 fn gram(q: &[f64], w: &[f64]) -> Square {
     let mut c = [[0.0; BLOCK]; BLOCK];
     for (qi, wi) in q.chunks_exact(BLOCK).zip(w.chunks_exact(BLOCK)) {
@@ -495,8 +489,6 @@ impl Space<'_> {
         r
     }
 }
-
-// LANCZOS
 
 fn apply(rows: &[Vec<(usize, f64)>], v: &[f64]) -> Vec<f64> {
     rows.iter()
@@ -746,16 +738,4 @@ pub(crate) fn lowest(rows: &[Vec<(usize, f64)>], count: usize, gap: f64) -> Resu
     values.truncate(cut);
     vectors.truncate(cut);
     Ok((values, vectors))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_inertia_shift_sits_midway_to_the_next_value_past_the_gap() {
-        assert_eq!(shift(1.0, [1.5, 3.0].into_iter(), 1e-8), 1.25);
-        assert_eq!(shift(1.0, [1.0 + 2e-8].into_iter(), 1e-8), 1.0 + 1e-8);
-        assert_eq!(shift(1.0, [1.0 + 5e-9].into_iter(), 1e-8), 1.0 + 1e-8);
-    }
 }

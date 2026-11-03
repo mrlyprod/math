@@ -6,11 +6,6 @@ use mrly_core::error::Result;
 use mrly_core::rng::Rng;
 use std::collections::HashMap;
 
-/// Colors each triangle by its type through the custom or default mapping in the given or type mode.
-///
-/// # Errors
-///
-/// Errors when the Random mode arrives without a stream to draw from.
 pub fn paint(
     mut cell: Cell6d,
     custom: Option<&HashMap<u8, Vec<Color>>>,

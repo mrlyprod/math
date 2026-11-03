@@ -2,7 +2,6 @@ use super::Lattice;
 use crate::bang::{Code, code_to_corners};
 use mrly_core::error::Result;
 
-/// Returns the two lattice coordinates of each pixel centre along a row.
 pub fn axes(size: usize, lattice: Lattice, row: usize) -> (Vec<f64>, Vec<f64>) {
     let inv = 1.0 / size as f64;
     let v = (row as f64 + 0.5) * inv;
@@ -25,11 +24,6 @@ pub fn axes(size: usize, lattice: Lattice, row: usize) -> (Vec<f64>, Vec<f64>) {
     (a, b)
 }
 
-/// Unpacks a code into its residue-corner truth table.
-///
-/// # Errors
-///
-/// Errors when the code is out of range for the dimension and base.
 pub fn membership(code: u128, base: usize, dimension: usize) -> Result<Vec<bool>> {
     let corners = code_to_corners(Code::from(code), dimension, base)?;
     let total = base.pow(dimension as u32);
@@ -44,7 +38,6 @@ pub fn membership(code: u128, base: usize, dimension: usize) -> Result<Vec<bool>
     Ok(table)
 }
 
-/// Folds residues into a base-q index of the truth table.
 #[inline]
 pub fn pack(residues: &[usize], base: usize) -> usize {
     let mut idx = 0usize;
@@ -52,28 +45,4 @@ pub fn pack(residues: &[usize], base: usize) -> usize {
         idx = idx * base + r;
     }
     idx
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn square_axes_are_pixel_centres() {
-        let (a, b) = axes(4, Lattice::Square, 0);
-        assert!((a[0] - 0.125).abs() < 1e-12);
-        assert!((b[0] - 0.125).abs() < 1e-12);
-        assert!((a[3] - 0.875).abs() < 1e-12);
-    }
-    #[test]
-    fn membership_matches_corners() {
-        let t = membership(1, 2, 2).unwrap();
-        assert_eq!(t.len(), 4);
-        assert!(t[pack(&[0, 0], 2)]);
-        assert!(!t[pack(&[1, 1], 2)]);
-    }
-    #[test]
-    fn full_code_is_all_true() {
-        let t = membership(15, 2, 2).unwrap();
-        assert!(t.iter().all(|&x| x));
-    }
 }

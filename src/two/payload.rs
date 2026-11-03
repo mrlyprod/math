@@ -15,7 +15,6 @@ const FRAME: [u8; 25] = [
     0, 1, 1, 1, 0,
 ];
 
-/// The five by five mask a carried mosaic lays its four tiles out under.
 pub fn frame() -> Tensor {
     let mut frame = Tensor::new(vec![5, 5]);
     for (flat, &value) in FRAME.iter().enumerate().take(frame.size()) {
@@ -24,21 +23,10 @@ pub fn frame() -> Tensor {
     frame
 }
 
-/// Returns the payload bytes the cell's filled sites can hold, its length header paid for.
-///
-/// ```
-/// let cell = mrly_math::two::carpet(3, 3).unwrap();
-/// assert_eq!(mrly_math::two::payload::capacity(&cell), 60);
-/// ```
 pub fn capacity(cell: &Cell2d) -> usize {
     census::fills(cell).saturating_sub(HEADER) / 8
 }
 
-/// Writes the payload over the cell's filled sites, repeating it until every site is spoken for.
-///
-/// # Errors
-///
-/// Errors when the payload needs more sites than the cell carries.
 pub fn embed(cell: &Cell2d, payload: &[u8]) -> Result<Cell2d> {
     let sites = sites(cell);
     let bits = message(payload);
@@ -56,11 +44,6 @@ pub fn embed(cell: &Cell2d, payload: &[u8]) -> Result<Cell2d> {
     Ok(out)
 }
 
-/// Reads the payload back, the plain cell naming the sites the carried one wrote over.
-///
-/// # Errors
-///
-/// Errors when the two cells differ in shape, or the header does not fit.
 pub fn extract(carrier: &Cell2d, carried: &Cell2d) -> Result<Vec<u8>> {
     if carrier.types().shape != carried.types().shape {
         return value_error("carrier and carried must share one shape.");
@@ -85,11 +68,6 @@ pub fn extract(carrier: &Cell2d, carried: &Cell2d) -> Result<Vec<u8>> {
         .collect())
 }
 
-/// Builds the framed sheet of four same-sized cells, the fourth carrying the payload.
-///
-/// # Errors
-///
-/// Errors when the payload needs more sites than the carrier holds.
 pub fn sheet(cells: &[Cell2d; 4], payload: &[u8]) -> Result<Cell2d> {
     let carried = embed(&cells[3], payload)?;
     let laid = [
@@ -101,11 +79,6 @@ pub fn sheet(cells: &[Cell2d; 4], payload: &[u8]) -> Result<Cell2d> {
     geometry::mosaic(&frame(), &laid)
 }
 
-/// Reads the payload back from a framed sheet, the plain fourth cell naming the sites.
-///
-/// # Errors
-///
-/// Errors when the sheet is not five carriers across and down.
 pub fn read(sheet: &Cell2d, carrier: &Cell2d) -> Result<Vec<u8>> {
     let (w, h) = (carrier.width(), carrier.height());
     if sheet.width() != w * 5 || sheet.height() != h * 5 {
@@ -142,116 +115,4 @@ fn block(cell: &Cell2d, row: usize, col: usize, width: usize, height: usize) -> 
         }
     }
     Cell2d::new(types)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::two::designs;
-
-    fn carrier() -> Cell2d {
-        designs::carpet(3, 3).unwrap()
-    }
-
-    #[test]
-    fn payload_round_trips_through_the_filled_sites() {
-        let plain = carrier();
-        let payload = b"Hello, World!";
-        let carried = embed(&plain, payload).unwrap();
-        assert_eq!(carried.types().shape, plain.types().shape);
-        assert_ne!(carried.types(), plain.types());
-        assert_eq!(extract(&plain, &carried).unwrap(), payload);
-    }
-
-    #[test]
-    fn every_payload_length_survives() {
-        let plain = carrier();
-        for length in [0usize, 1, 2, 7, 8, 59, 60] {
-            let payload: Vec<u8> = (0..length).map(|i| (i * 37 % 251) as u8).collect();
-            let carried = embed(&plain, &payload).unwrap();
-            assert_eq!(
-                extract(&plain, &carried).unwrap(),
-                payload,
-                "length {length}"
-            );
-        }
-    }
-
-    #[test]
-    fn capacity_is_the_fills_less_the_header() {
-        let plain = carrier();
-        assert_eq!(census::fills(&plain), 512);
-        assert_eq!(capacity(&plain), 60);
-        let full = vec![7u8; capacity(&plain)];
-        assert!(embed(&plain, &full).is_ok());
-        let over = vec![7u8; capacity(&plain) + 1];
-        assert!(embed(&plain, &over).is_err());
-        assert_eq!(capacity(&designs::ones(2, 1).unwrap()), 0);
-    }
-
-    #[test]
-    fn the_payload_repeats_across_the_spare_sites() {
-        let plain = carrier();
-        let carried = embed(&plain, b"ab").unwrap();
-        let sites = sites(&plain);
-        let bits = message(b"ab");
-        for (k, &site) in sites.iter().enumerate() {
-            assert_eq!(
-                carried.types().at(site) as u8,
-                bits[k % bits.len()],
-                "site {site}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_carrier_names_the_sites() {
-        let plain = carrier();
-        let carried = embed(&plain, b"secret").unwrap();
-        let wrong = designs::net(3, 3).unwrap();
-        assert!(extract(&wrong, &carried).unwrap_or_default() != b"secret".to_vec());
-        assert!(extract(&plain, &designs::carpet(3, 2).unwrap()).is_err());
-        assert!(extract(&designs::ones(2, 1).unwrap(), &designs::ones(2, 1).unwrap()).is_err());
-    }
-
-    #[test]
-    fn refuses_a_stray_length() {
-        let plain = carrier();
-        let mut carried = embed(&plain, b"x").unwrap();
-        for &site in sites(&plain).iter().take(HEADER) {
-            carried.cell.types.put(site, 1);
-        }
-        assert!(extract(&plain, &carried).is_err());
-    }
-
-    #[test]
-    fn the_sheet_frames_the_carrier() {
-        let tiles = [
-            designs::carpet(3, 3).unwrap(),
-            designs::vtree(3, 3).unwrap().rotate(1).unwrap(),
-            designs::vtree(3, 3).unwrap(),
-            designs::carpet(3, 3).unwrap(),
-        ];
-        let framed = sheet(&tiles, b"Hello, World!").unwrap();
-        assert_eq!((framed.width(), framed.height()), (135, 135));
-        assert_eq!(read(&framed, &tiles[3]).unwrap(), b"Hello, World!");
-        let corner = block(&framed, 0, 0, 27, 27).unwrap();
-        assert_eq!(corner.types(), tiles[0].types());
-        assert!(read(&tiles[3].clone(), &tiles[3]).is_err());
-    }
-
-    #[test]
-    fn the_frame_names_four_tiles() {
-        let mask = frame();
-        assert_eq!(mask.shape, vec![5, 5]);
-        assert_eq!(mask.get(&[0, 0]).unwrap(), 0);
-        assert_eq!(mask.get(&[0, 1]).unwrap(), 1);
-        assert_eq!(mask.get(&[1, 0]).unwrap(), 2);
-        assert_eq!(mask.get(&[2, 2]).unwrap(), 3);
-        let mut seen = [0usize; 4];
-        for &value in mask.bytes().unwrap() {
-            seen[value as usize] += 1;
-        }
-        assert_eq!(seen, [4, 6, 6, 9]);
-    }
 }

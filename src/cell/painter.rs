@@ -6,11 +6,6 @@ use mrly_core::error::Result;
 use mrly_core::rng::Rng;
 use std::collections::HashMap;
 
-/// Colors the cell through the given mapping and mode, defaulting to the standard palette by type.
-///
-/// # Errors
-///
-/// Errors when the Random mode arrives without a stream to draw from.
 pub fn paint<const N: usize>(
     cell: CellNd<N>,
     custom: Option<&HashMap<u8, Vec<Color>>>,

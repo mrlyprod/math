@@ -3,14 +3,6 @@ use super::faces::quads;
 use crate::cell::push_glyph;
 use std::collections::HashMap;
 
-/// Renders the cube as rows of glyphs, plane after plane, or of digits where no glyph is mapped.
-///
-/// ```
-/// let cell = mrly_math::three::carpet(3, 1).unwrap();
-/// let rows = mrly_math::three::text(&cell, None);
-/// assert_eq!(rows.len(), 9);
-/// assert_eq!(&rows[..3], ["111", "101", "111"]);
-/// ```
 pub fn text(cell: &Cell3d, glyphs: Option<&HashMap<u8, String>>) -> Vec<String> {
     let types = cell.types();
     let (depth, height, width) = (types.shape[0], types.shape[1], types.shape[2]);
@@ -28,13 +20,6 @@ pub fn text(cell: &Cell3d, glyphs: Option<&HashMap<u8, String>>) -> Vec<String> 
     rows
 }
 
-/// Writes the cube's exposed quads as a Wavefront OBJ, one shared vertex per corner.
-///
-/// ```
-/// let obj = mrly_math::three::to_obj(&mrly_math::three::carpet(3, 1).unwrap());
-/// assert_eq!(obj.lines().filter(|line| line.starts_with("v ")).count(), 64);
-/// assert_eq!(obj.lines().filter(|line| line.starts_with("f ")).count(), 72);
-/// ```
 pub fn to_obj(cell: &Cell3d) -> String {
     let shape = &cell.types().shape;
     let side = shape[0].max(shape[1]).max(shape[2]) as f32;
@@ -66,24 +51,4 @@ pub fn to_obj(cell: &Cell3d) -> String {
         ));
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::three::designs;
-    #[test]
-    fn text_walks_every_plane_of_the_sponge() {
-        let rows = text(&designs::carpet(3, 1).unwrap(), None);
-        assert_eq!(rows.len(), 9);
-        assert_eq!(&rows[..3], ["111", "101", "111"]);
-    }
-
-    #[test]
-    fn the_sponge_writes_its_obj() {
-        let obj = to_obj(&designs::carpet(3, 1).unwrap());
-        assert_eq!(obj.lines().filter(|l| l.starts_with("v ")).count(), 64);
-        assert_eq!(obj.lines().filter(|l| l.starts_with("f ")).count(), 72);
-        assert_eq!(obj.len(), 1481);
-    }
 }

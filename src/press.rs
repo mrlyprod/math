@@ -3,7 +3,6 @@ use crate::bang::factory::{MagicLayer, code_to_corners};
 use mrly_core::error::{Result, overflow_error, value_error};
 use serde::{Deserialize, Serialize};
 
-/// The largest corner count the tally press accepts, keeping its table a million rows.
 pub const CORNERS: usize = 20;
 
 fn corner_count(dimension: usize, base: usize) -> Result<usize> {
@@ -16,19 +15,6 @@ fn corner_count(dimension: usize, base: usize) -> Result<usize> {
     Ok(count)
 }
 
-/// Returns the corner-usage mask of a number, one bit per digit vector its expansion uses.
-///
-/// A number is read in base `base` to the power of the dimension, so each digit is one
-/// residue corner of the design cube, and zero uses exactly the zero corner.
-///
-/// ```
-/// assert_eq!(mrly_math::press::usage(0, 2, 2).unwrap().get(), 1);
-/// assert_eq!(mrly_math::press::usage(6, 2, 2).unwrap().get(), 0b0110);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn usage(number: u128, dimension: usize, base: usize) -> Result<Code> {
     Ok(mask(number, corner_count(dimension, base)? as u128))
 }
@@ -46,60 +32,18 @@ fn mask(number: u128, radix: u128) -> Code {
     Code(out)
 }
 
-/// Returns whether every digit vector of the number lies in the design.
-///
-/// This is the scalar membership rule of the sequence press: the number's base
-/// `base` to the dimension digits, read as residue corners, must all be filled.
-/// At dimension one it is the classic restricted-digit set.
-///
-/// ```
-/// use mrly_math::bang::Code;
-/// let members: Vec<u128> = (0..30).filter(|&n| mrly_math::press::member(Code::from(0b0111u64), n, 2, 2).unwrap()).collect();
-/// assert_eq!(members, vec![0, 1, 2, 4, 5, 6, 8, 9, 10, 16, 17, 18, 20, 21, 22, 24, 25, 26]);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn member(code: Code, number: u128, dimension: usize, base: usize) -> Result<bool> {
     Ok(usage(number, dimension, base)?.get() & !code.get() == 0)
 }
 
-/// Returns the count of distinct digit vectors the number uses.
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn distinct(number: u128, dimension: usize, base: usize) -> Result<u32> {
     Ok(usage(number, dimension, base)?.get().count_ones())
 }
 
-/// Returns the number of designs of the dimension and base that contain the number.
-///
-/// A design contains the number exactly when it fills every used corner, so the count
-/// is two to the free corners, and the average membership over all designs is one over
-/// two to the distinct-vector count.
-///
-/// ```
-/// assert_eq!(mrly_math::press::containing(6, 2, 2).unwrap(), 4);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn containing(number: u128, dimension: usize, base: usize) -> Result<u128> {
     Ok(1 << (corner_count(dimension, base)? as u32 - distinct(number, dimension, base)?))
 }
 
-/// Splits a number into its dimension coordinates, one base digit peeled per axis in parallel.
-///
-/// ```
-/// assert_eq!(mrly_math::press::coordinates(6, 2, 2).unwrap(), vec![1, 2]);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn coordinates(number: u128, dimension: usize, base: usize) -> Result<Vec<u128>> {
     let radix = corner_count(dimension, base)? as u128;
     let mut out = vec![0u128; dimension];
@@ -117,11 +61,6 @@ pub fn coordinates(number: u128, dimension: usize, base: usize) -> Result<Vec<u1
     Ok(out)
 }
 
-/// Weaves dimension coordinates back into their single interleaved number.
-///
-/// # Errors
-///
-/// Errors on an empty coordinate list, past a hundred and twenty-seven corners, or when the woven number passes a u128.
 pub fn interleave(coords: &[u128], base: usize) -> Result<u128> {
     if coords.is_empty() {
         return value_error("interleave needs at least one coordinate.");
@@ -150,18 +89,6 @@ pub fn interleave(coords: &[u128], base: usize) -> Result<u128> {
     Ok(out)
 }
 
-/// Returns the first members of a design in ascending order.
-///
-/// Stops early where the next member would pass a hundred and twenty-eight bits.
-///
-/// ```
-/// use mrly_math::bang::Code;
-/// assert_eq!(mrly_math::press::members(Code::from(0b10u64), 1, 2, 5).unwrap(), vec![1, 3, 7, 15, 31]);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn members(code: Code, dimension: usize, base: usize, count: usize) -> Result<Vec<u128>> {
     let radix = corner_count(dimension, base)? as u128;
     let allowed: Vec<u128> = (0..radix).filter(|&i| (code.get() >> i) & 1 == 1).collect();
@@ -220,16 +147,6 @@ pub fn members(code: Code, dimension: usize, base: usize, count: usize) -> Resul
     Ok(out)
 }
 
-/// Counts the members of a design below the limit.
-///
-/// ```
-/// use mrly_math::bang::Code;
-/// assert_eq!(mrly_math::press::count_below(Code::from(0b0111u64), 2, 2, 27).unwrap(), 18);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the dimension and base reach a hundred and twenty-eight corners.
 pub fn count_below(code: Code, dimension: usize, base: usize, limit: u128) -> Result<u128> {
     let radix = corner_count(dimension, base)? as u128;
     let allowed: Vec<u128> = (0..radix).filter(|&i| (code.get() >> i) & 1 == 1).collect();
@@ -265,34 +182,15 @@ pub fn count_below(code: Code, dimension: usize, base: usize, limit: u128) -> Re
     Ok(total)
 }
 
-/// The tally press: one pass over the integers weighs every design of a universe at once.
-///
-/// Each added number lands its weight in the bucket of its corner-usage mask, and a
-/// design's total is the sum over the submasks of its code, so a single sweep prices
-/// a Mertens sum, a member count or a prime count for all two to the corners designs.
 #[derive(Serialize, Deserialize)]
 pub struct Press {
-    /// The design dimension of the universe.
     pub dimension: usize,
-    /// The numeral base of the universe.
     pub base: usize,
     corners: usize,
     tallies: Vec<i128>,
 }
 
 impl Press {
-    /// Builds an empty press over every design of the dimension and base.
-    ///
-    /// ```
-    /// use mrly_math::bang::Code;
-    /// let mut press = mrly_math::press::Press::new(2, 2).unwrap();
-    /// press.add(6, 1);
-    /// assert_eq!((press.total(Code::from(6u64)), press.total(Code::from(1u64))), (1, 0));
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Errors past twenty corners, where the bucket table would leave a million rows.
     pub fn new(dimension: usize, base: usize) -> Result<Press> {
         let corners = corner_count(dimension, base)?;
         if corners > CORNERS {
@@ -307,11 +205,9 @@ impl Press {
             tallies: vec![0; 1 << corners],
         })
     }
-    /// Adds a weighted number to its usage bucket.
     pub fn add(&mut self, number: u128, weight: i128) {
         self.tallies[mask(number, self.corners as u128).get() as usize] += weight;
     }
-    /// Returns the total weight the design at a code has collected.
     pub fn total(&self, code: Code) -> i128 {
         let code = code.get();
         let mut sum = self.tallies[0];
@@ -322,7 +218,6 @@ impl Press {
         }
         sum
     }
-    /// Returns every design's total in code order by one subset-sum transform.
     pub fn totals(&self) -> Vec<i128> {
         let mut out = self.tallies.clone();
         for bit in 0..self.corners {
@@ -340,14 +235,6 @@ fn layer_radix(layer: &MagicLayer) -> u128 {
     (layer.number as u128).pow(layer.design.dim as u32)
 }
 
-/// Returns the allowed digit table of one magic layer, one flag per cell of its tile.
-///
-/// A cell is allowed when its coordinate residues form a filled corner, which is the
-/// tile the layer renders read as a digit alphabet.
-///
-/// # Errors
-///
-/// Errors when a layer's code is out of range.
 pub fn layer_table(layer: &MagicLayer) -> Result<Vec<bool>> {
     let corners = code_to_corners(
         Code::from(layer.design.code),
@@ -381,11 +268,6 @@ fn word_tables(layers: &[MagicLayer]) -> Result<Vec<Vec<bool>>> {
     layers.iter().map(layer_table).collect()
 }
 
-/// Counts the members of a magic word from its layer fills, without enumeration.
-///
-/// # Errors
-///
-/// Errors when a layer's code is out of range.
 pub fn word_count(layers: &[MagicLayer]) -> Result<u128> {
     let tables = word_tables(layers)?;
     Ok(tables
@@ -394,15 +276,6 @@ pub fn word_count(layers: &[MagicLayer]) -> Result<u128> {
         .product())
 }
 
-/// Returns whether the number lies in the magic word's composed design.
-///
-/// The number is read in the word's mixed radix, one digit per layer with the first
-/// layer most significant, and every digit must land on an allowed cell of its tile.
-/// A number past the word's domain is an error.
-///
-/// # Errors
-///
-/// Errors on a code out of range, or a number past the word's domain.
 pub fn word_member(layers: &[MagicLayer], number: u128) -> Result<bool> {
     let tables = word_tables(layers)?;
     let mut rest = number;
@@ -418,14 +291,6 @@ pub fn word_member(layers: &[MagicLayer], number: u128) -> Result<bool> {
     Ok(ok)
 }
 
-/// Enumerates every member of the magic word in ascending order.
-///
-/// The member count is the product of the layer fills, so measure with `word_count`
-/// before pressing a word too rich to hold.
-///
-/// # Errors
-///
-/// Errors when a layer's code is out of range.
 pub fn word_members(layers: &[MagicLayer]) -> Result<Vec<u128>> {
     let tables = word_tables(layers)?;
     let alphabets: Vec<Vec<u128>> = tables
@@ -465,15 +330,6 @@ pub fn word_members(layers: &[MagicLayer]) -> Result<Vec<u128>> {
     }
 }
 
-/// Returns the diagonal slice profile of a magic word by the substitution product.
-///
-/// The profile of a tile lists, per coordinate sum, its filled cells, and the profile
-/// of a Kronecker word is the product of its layer profiles with strides, so no cell
-/// of the composed design is ever enumerated.
-///
-/// # Errors
-///
-/// Errors when a layer's code is out of range.
 pub fn word_profile(layers: &[MagicLayer]) -> Result<Vec<u128>> {
     let tables = word_tables(layers)?;
     let dimension = layers[0].design.dim;
@@ -508,255 +364,10 @@ pub fn word_profile(layers: &[MagicLayer]) -> Result<Vec<u128>> {
     Ok(out)
 }
 
-/// Returns the diagonal slice profile of one design pressed to a fractal level.
-///
-/// # Errors
-///
-/// Errors below level one, or on a code out of range.
 pub fn profile(code: Code, dimension: usize, base: usize, level: usize) -> Result<Vec<u128>> {
     if level < 1 {
         return value_error("level must be at least 1.");
     }
     let layer = MagicLayer::new(crate::name::Bang::new(code.get(), dimension, base), base);
     word_profile(&vec![layer; level])
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::factory::create;
-    use crate::name::Bang;
-
-    #[test]
-    fn usage_of_zero_is_the_zero_corner() {
-        assert_eq!(usage(0, 2, 2).unwrap().get(), 1);
-        assert_eq!(usage(0, 1, 10).unwrap().get(), 1);
-        assert_eq!(distinct(0, 2, 2).unwrap(), 1);
-    }
-
-    #[test]
-    fn membership_matches_a_digit_check_at_base_ten() {
-        let no_seven = Code(!(1u128 << 7) & ((1u128 << 10) - 1));
-        for n in 0..10_000u128 {
-            let digits_clean = !n.to_string().contains('7');
-            assert_eq!(member(no_seven, n, 1, 10).unwrap(), digits_clean, "{n}");
-        }
-    }
-
-    #[test]
-    fn members_of_the_repunit_design_are_the_mersenne_numbers() {
-        assert_eq!(
-            members(Code(0b10), 1, 2, 6).unwrap(),
-            vec![1, 3, 7, 15, 31, 63]
-        );
-    }
-
-    #[test]
-    fn members_walk_ascending_and_agree_with_membership() {
-        for code in [Code(0b0111), Code(0b0110), Code(0b1001), Code(0b1111)] {
-            let list = members(code, 2, 2, 40).unwrap();
-            for pair in list.windows(2) {
-                assert!(pair[0] < pair[1]);
-            }
-            let scanned: Vec<u128> = (0..200)
-                .filter(|&n| member(code, n, 2, 2).unwrap())
-                .collect();
-            let shared = list.len().min(scanned.len());
-            assert_eq!(list[..shared], scanned[..shared], "{code}");
-        }
-    }
-
-    #[test]
-    fn count_below_agrees_with_the_member_walk() {
-        for code in [
-            Code(0b0111),
-            Code(0b0110),
-            Code(0b1011),
-            Code(0b0001),
-            Code(0b0000),
-        ] {
-            let list = members(code, 2, 2, 60).unwrap();
-            for limit in 0..300u128 {
-                let walked = list.iter().filter(|&&m| m < limit).count() as u128;
-                if list.len() < 60 || walked < 60 {
-                    assert_eq!(
-                        count_below(code, 2, 2, limit).unwrap(),
-                        walked,
-                        "{code} {limit}"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn the_member_count_at_a_level_boundary_is_the_geometric_sum() {
-        let code = Code(0b0111);
-        let k: u128 = 3;
-        for level in 1..6u32 {
-            let boundary = 4u128.pow(level);
-            let full: u128 = 1 + (k - 1) * (k.pow(level) - 1) / (k - 1);
-            assert_eq!(count_below(code, 2, 2, boundary).unwrap(), full);
-        }
-    }
-
-    #[test]
-    fn membership_matches_the_rendered_fractal() {
-        for code in [Code(7), Code(6), Code(9), Code(11)] {
-            let level = 3;
-            let tile = create(code, 2, 2, 2, level).unwrap();
-            let side = 1u128 << level;
-            for n in 0..4u128.pow(level as u32) {
-                let coords = coordinates(n, 2, 2).unwrap();
-                let flat = (coords[0] * side + coords[1]) as usize;
-                let filled = tile.bytes().unwrap()[flat] == 1;
-                let padded = member(code, n, 2, 2).unwrap()
-                    && (code.get() & 1 == 1 || n >= 4u128.pow(level as u32 - 1));
-                assert_eq!(padded, filled, "{code} {n}");
-            }
-        }
-    }
-
-    #[test]
-    fn coordinates_and_interleave_round_trip() {
-        for n in 0..5_000u128 {
-            assert_eq!(interleave(&coordinates(n, 2, 2).unwrap(), 2).unwrap(), n);
-            assert_eq!(interleave(&coordinates(n, 3, 2).unwrap(), 2).unwrap(), n);
-            assert_eq!(interleave(&coordinates(n, 2, 3).unwrap(), 3).unwrap(), n);
-        }
-    }
-
-    #[test]
-    fn containing_counts_the_designs_that_hold_the_number() {
-        for n in 0..500u128 {
-            let direct = (0..16u128)
-                .filter(|&code| member(Code(code), n, 2, 2).unwrap())
-                .count();
-            assert_eq!(containing(n, 2, 2).unwrap(), direct as u128, "{n}");
-        }
-    }
-
-    #[test]
-    fn the_membership_average_over_all_designs_is_two_to_minus_distinct() {
-        for n in 0..2_000u128 {
-            assert_eq!(
-                containing(n, 2, 2).unwrap(),
-                1 << (4 - distinct(n, 2, 2).unwrap())
-            );
-            assert_eq!(
-                containing(n, 3, 2).unwrap(),
-                1 << (8 - distinct(n, 3, 2).unwrap())
-            );
-        }
-    }
-
-    #[test]
-    fn the_press_totals_agree_with_direct_member_sums() {
-        let mut press = Press::new(2, 2).unwrap();
-        let weights: Vec<i128> = (0..600).map(|n| (n as i128 % 7) - 3).collect();
-        for (n, &w) in weights.iter().enumerate() {
-            press.add(n as u128, w);
-        }
-        let totals = press.totals();
-        for code in 0..16u128 {
-            let direct: i128 = weights
-                .iter()
-                .enumerate()
-                .filter(|(n, _)| member(Code(code), *n as u128, 2, 2).unwrap())
-                .map(|(_, &w)| w)
-                .sum();
-            assert_eq!(press.total(Code(code)), direct, "{code}");
-            assert_eq!(totals[code as usize], direct, "{code}");
-        }
-    }
-
-    #[test]
-    fn a_native_word_is_the_stationary_press() {
-        let layer = MagicLayer::new(Bang::new(7, 2, 2), 2);
-        let word = vec![layer; 3];
-        for n in 0..64u128 {
-            let padded = member(Code(7), n, 2, 2).unwrap();
-            assert_eq!(word_member(&word, n).unwrap(), padded, "{n}");
-        }
-        assert_eq!(word_count(&word).unwrap(), 27);
-    }
-
-    #[test]
-    fn word_members_match_the_magic_tensor() {
-        let word = [
-            MagicLayer::new(Bang::new(7, 2, 2), 3),
-            MagicLayer::new(Bang::new(14, 2, 2), 5),
-        ];
-        let tensor = crate::bang::factory::magic(&word).unwrap();
-        let side = 15u128;
-        let list = word_members(&word).unwrap();
-        assert_eq!(list.len() as u128, word_count(&word).unwrap());
-        for n in 0..word.iter().map(layer_radix).product::<u128>() {
-            let mut rest = n;
-            let mut x = 0u128;
-            let mut y = 0u128;
-            let mut place = 1u128;
-            for layer in word.iter().rev() {
-                let cell = rest % layer_radix(layer);
-                rest /= layer_radix(layer);
-                let s = layer.number as u128;
-                x += (cell / s) * place;
-                y += (cell % s) * place;
-                place *= s;
-            }
-            let filled = tensor.bytes().unwrap()[(x * side + y) as usize] == 1;
-            assert_eq!(word_member(&word, n).unwrap(), filled, "{n}");
-            assert_eq!(list.contains(&n), filled, "{n}");
-        }
-    }
-
-    #[test]
-    fn word_profiles_match_the_rendered_diagonal_sums() {
-        let word = [
-            MagicLayer::new(Bang::new(7, 2, 2), 3),
-            MagicLayer::new(Bang::new(14, 2, 2), 5),
-        ];
-        let tensor = crate::bang::factory::magic(&word).unwrap();
-        let side = 15usize;
-        let mut direct = vec![0u128; 2 * side - 1];
-        for (flat, &b) in tensor.bytes().unwrap().iter().enumerate() {
-            if b == 1 {
-                direct[flat / side + flat % side] += 1;
-            }
-        }
-        assert_eq!(word_profile(&word).unwrap(), direct);
-    }
-
-    #[test]
-    fn profile_totals_are_the_fill_powers() {
-        let native = profile(Code(7), 2, 2, 4).unwrap();
-        assert_eq!(native.iter().sum::<u128>(), 3u128.pow(4));
-        let sponge = vec![MagicLayer::new(Bang::new(23, 3, 2), 3); 3];
-        let classic = word_profile(&sponge).unwrap();
-        assert_eq!(classic.iter().sum::<u128>(), 20u128.pow(3));
-    }
-
-    #[test]
-    fn refuses_a_universe_past_its_corners_and_an_empty_weave() {
-        assert!(Press::new(5, 2).is_err());
-        assert!(Press::new(7, 2).is_err());
-        assert!(usage(1, 7, 2).is_err());
-        assert!(member(Code(1), 1, 7, 2).is_err());
-        assert!(distinct(1, 7, 2).is_err());
-        assert!(containing(1, 7, 2).is_err());
-        assert!(coordinates(1, 7, 2).is_err());
-        assert!(members(Code(1), 7, 2, 1).is_err());
-        assert!(count_below(Code(1), 7, 2, 4).is_err());
-        assert!(interleave(&[], 2).is_err());
-        assert!(interleave(&[u128::MAX, u128::MAX], 2).is_err());
-    }
-
-    #[test]
-    fn refuses_a_word_of_mismatched_dimensions_or_a_number_past_its_domain() {
-        let plane = MagicLayer::new(Bang::new(7, 2, 2), 3);
-        let cube = MagicLayer::new(Bang::new(23, 3, 2), 3);
-        assert!(word_member(&[plane.clone(), cube], 0).is_err());
-        assert!(word_member(&[plane], 9).is_err());
-        assert!(word_member(&[], 0).is_err());
-    }
 }

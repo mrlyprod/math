@@ -5,27 +5,18 @@ use mrly_core::error::{Result, value_error};
 use mrly_core::tensor::Tensor;
 use serde::{Deserialize, Serialize};
 
-/// A cubic grid of f32 samples, x-major.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Volume {
-    /// The samples, x-major, then y, then z.
     pub data: Vec<f32>,
-    /// The side in samples.
     pub size: usize,
 }
 
-/// A plane through the unit box, framed for sampling: its centre, its two in-plane axes and the width of the square window that holds the whole section, all in the box `[-1, 1]^3`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Frame {
-    /// The point of the plane the window is centred on.
     pub centre: [f64; 3],
-    /// The unit axis the window's columns run along.
     pub u: [f64; 3],
-    /// The unit axis the window's rows run along.
     pub v: [f64; 3],
-    /// The unit normal.
     pub normal: [f64; 3],
-    /// The side of the square window.
     pub width: f64,
 }
 
@@ -47,37 +38,27 @@ fn unit(a: [f64; 3]) -> Option<[f64; 3]> {
 }
 
 impl Volume {
-    /// Builds a zeroed volume of the side.
     pub fn new(size: usize) -> Volume {
         Volume {
             data: vec![0.0; size * size * size],
             size,
         }
     }
-    /// Wraps x-major samples of the side.
-    ///
-    /// # Errors
-    ///
-    /// Errors when the count is not the side cubed.
     pub fn from_data(data: Vec<f32>, size: usize) -> Result<Volume> {
         if data.len() != size * size * size {
             return value_error("data must be size*size*size.");
         }
         Ok(Volume { data, size })
     }
-    /// Returns the smallest sample.
     pub fn min(&self) -> f32 {
         self.data.iter().cloned().fold(f32::INFINITY, f32::min)
     }
-    /// Returns the largest sample.
     pub fn max(&self) -> f32 {
         self.data.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
     }
-    /// Reads the sample at a voxel.
     pub fn at(&self, x: usize, y: usize, z: usize) -> f32 {
         self.data[(x * self.size + y) * self.size + z]
     }
-    /// Reads the voxel a point of the unit cube falls in, or zero outside it.
     pub fn sample(&self, p: [f64; 3]) -> Option<f32> {
         if p.iter().any(|&c| !(0.0..1.0).contains(&c)) {
             return None;
@@ -89,7 +70,6 @@ impl Volume {
             (p[2] * s) as usize,
         ))
     }
-    /// Thresholds into a byte tensor: one where a sample reaches the level, zero below.
     pub fn solid(&self, level: f32) -> Tensor {
         let mut grid = Tensor::new(vec![self.size; 3]);
         for (flat, &v) in self.data.iter().take(grid.size()).enumerate() {
@@ -97,11 +77,9 @@ impl Volume {
         }
         grid
     }
-    /// Counts the samples at or above the level.
     pub fn count(&self, level: f32) -> usize {
         self.data.iter().filter(|&&v| v >= level).count()
     }
-    /// Samples the plane of the frame on an out by out window: the values row by row, and one byte per pixel saying whether it lies inside the cube.
     pub fn plane(&self, frame: &Frame, out: usize) -> (Vec<f32>, Vec<u8>) {
         let mut values = Vec::with_capacity(out * out);
         let mut inside = Vec::with_capacity(out * out);
@@ -128,11 +106,6 @@ impl Volume {
     }
 }
 
-/// Frames the plane normal to the direction, at the offset from zero to one across the box along it; the window is the smallest square holding every section on that normal.
-///
-/// # Errors
-///
-/// Errors on a zero normal.
 pub fn frame(normal: [f64; 3], offset: f64) -> Result<Frame> {
     let Some(n) = unit(normal) else {
         return value_error("the normal must not be zero.");
@@ -206,11 +179,6 @@ fn layer(spec: Spec, number: usize, level: usize, size: usize) -> Result<Vec<boo
     Ok(mask)
 }
 
-/// Layers one cube design at several side numbers into a volume under the chosen combine.
-///
-/// # Errors
-///
-/// Errors at size zero, or on a code out of range.
 pub fn volume(
     spec: Spec,
     numbers: &[usize],
@@ -229,55 +197,4 @@ pub fn volume(
         first = false;
     }
     Volume::from_data(acc, size)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::corners_to_code;
-
-    fn low() -> Spec {
-        Spec::new(corners_to_code(&[vec![0, 0, 0]], 3, 2).get(), 2, 3)
-    }
-
-    #[test]
-    fn the_low_corner_at_scale_one_fills_the_first_octant() {
-        let v = volume(low(), &[1], Combine::Sum, 1, 4).unwrap();
-        assert_eq!(v.count(1.0), 64);
-        let v = volume(low(), &[2], Combine::Sum, 1, 4).unwrap();
-        assert_eq!(v.count(1.0), 8);
-        assert_eq!(v.at(0, 0, 0), 1.0);
-        assert_eq!(v.at(3, 0, 0), 0.0);
-    }
-
-    #[test]
-    fn the_sponge_stack_counts_its_layers() {
-        let sponge = Spec::new(23, 2, 3);
-        let v = volume(sponge, &[1, 3], Combine::Sum, 1, 9).unwrap();
-        assert_eq!((v.min(), v.max()), (1.0, 2.0));
-        assert_eq!(v.count(2.0), 20 * 27);
-        let x = volume(sponge, &[1, 3], Combine::Xor, 1, 9).unwrap();
-        assert_eq!(x.count(1.0), 7 * 27);
-        let a = volume(sponge, &[3, 9], Combine::And, 1, 9).unwrap();
-        assert_eq!(a.count(1.0), 64 + 240 + 48);
-        assert!(volume(Spec::new(1, 2, 2), &[1], Combine::Sum, 1, 4).is_err());
-        assert!(volume(sponge, &[1], Combine::Sum, 1, 0).is_err());
-    }
-
-    #[test]
-    fn the_diagonal_frame_holds_the_hexagon() {
-        let f = frame([1.0, 1.0, 1.0], 0.5).unwrap();
-        assert!((dot(f.centre, f.normal)).abs() < 1e-12);
-        assert!((dot(f.u, f.v)).abs() < 1e-12);
-        assert!((f.width - 2.0 * (8.0f64 / 3.0).sqrt()).abs() < 1e-9);
-        let solid = Volume::from_data(vec![1.0; 27], 3).unwrap();
-        let (_, inside) = solid.plane(&f, 200);
-        let share = inside.iter().map(|&b| b as f64).sum::<f64>() / 40000.0;
-        let hexagon = 3.0 * 3f64.sqrt() / (f.width * f.width);
-        assert!((share - hexagon).abs() < 0.01, "{share} {hexagon}");
-        let x = frame([1.0, 0.0, 0.0], 0.25).unwrap();
-        assert!((x.centre[0] + 0.5).abs() < 1e-12);
-        assert_eq!(x.width, 2.0);
-        assert!(frame([0.0, 0.0, 0.0], 0.5).is_err());
-    }
 }

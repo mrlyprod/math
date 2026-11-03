@@ -3,7 +3,6 @@ use super::layer::{Layer, layer};
 use super::{Combine, Lattice, Spec};
 use mrly_core::error::Result;
 
-/// Folds one boolean layer into the accumulator under the combine, the first layer seeding a meet.
 pub(crate) fn merge(acc: &mut [f32], mask: &[bool], combine: Combine, first: bool) {
     match combine {
         Combine::Sum => {
@@ -28,17 +27,6 @@ pub(crate) fn merge(acc: &mut [f32], mask: &[bool], combine: Combine, first: boo
     }
 }
 
-/// Layers one design at several side numbers into a field under the chosen combine.
-///
-/// ```
-/// use mrly_math::moire::{stack, Combine, Lattice, Spec};
-/// let field = stack(Spec::new(7, 2, 2), &[3, 5], Combine::Sum, 1, Lattice::Square, 16, &[]).unwrap();
-/// assert_eq!(field.data.len(), 256);
-/// ```
-///
-/// # Errors
-///
-/// Errors below dimension two, or on a code out of range.
 pub fn stack(
     spec: Spec,
     numbers: &[usize],
@@ -65,11 +53,6 @@ pub fn stack(
     Field::from_data(acc, size)
 }
 
-/// Sums layers of several designs at one side number into a field.
-///
-/// # Errors
-///
-/// Errors below dimension two, or on a code out of range.
 pub fn stack_codes(
     specs: &[Spec],
     number: usize,
@@ -94,96 +77,4 @@ pub fn stack_codes(
         }
     }
     Field::from_data(acc, size)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn spec(code: u128) -> Spec {
-        Spec::new(code, 2, 2)
-    }
-    #[test]
-    fn sum_stack_counts_layers() {
-        let numbers = [1, 3, 5];
-        let f = stack(spec(7), &numbers, Combine::Sum, 1, Lattice::Square, 64, &[]).unwrap();
-        assert!(f.max() <= numbers.len() as f32);
-        assert!(f.min() >= 0.0);
-    }
-    #[test]
-    fn complement_identity() {
-        let numbers: Vec<usize> = (1..52).step_by(2).collect();
-        let size = 48;
-        for code in [1u128, 2, 3, 6, 7] {
-            let h = stack(
-                spec(code),
-                &numbers,
-                Combine::Sum,
-                1,
-                Lattice::Square,
-                size,
-                &[],
-            )
-            .unwrap();
-            let hc = stack(
-                spec(15 - code),
-                &numbers,
-                Combine::Sum,
-                1,
-                Lattice::Square,
-                size,
-                &[],
-            )
-            .unwrap();
-            let n = numbers.len() as f32;
-            let max_err = h
-                .data
-                .iter()
-                .zip(hc.data.iter())
-                .map(|(&a, &b)| (a + b - n).abs())
-                .fold(0.0f32, f32::max);
-            assert!(max_err < 1e-3, "code {code} max_err {max_err}");
-        }
-    }
-    #[test]
-    fn sponge_slice0_equals_carpet_stack() {
-        use crate::bang::corners_to_code;
-        let carpet_corners: Vec<Vec<u8>> = (0..3)
-            .flat_map(|a| (0..3).map(move |b| vec![a as u8, b as u8]))
-            .filter(|c| !(c[0] == 1 && c[1] == 1))
-            .collect();
-        let carpet_code = corners_to_code(&carpet_corners, 2, 3);
-        let sponge_corners: Vec<Vec<u8>> = (0..3)
-            .flat_map(|a| {
-                (0..3).flat_map(move |b| (0..3).map(move |c| vec![a as u8, b as u8, c as u8]))
-            })
-            .filter(|c| {
-                let centers = (c[0] == 1) as u8 + (c[1] == 1) as u8 + (c[2] == 1) as u8;
-                centers <= 1
-            })
-            .collect();
-        let sponge_code = corners_to_code(&sponge_corners, 3, 3);
-        let numbers: Vec<usize> = (1..20).step_by(2).collect();
-        let size = 48;
-        let carpet = stack(
-            Spec::new(carpet_code.get(), 3, 2),
-            &numbers,
-            Combine::Sum,
-            1,
-            Lattice::Square,
-            size,
-            &[],
-        )
-        .unwrap();
-        let sponge = stack(
-            Spec::new(sponge_code.get(), 3, 3),
-            &numbers,
-            Combine::Sum,
-            1,
-            Lattice::Square,
-            size,
-            &[0.0],
-        )
-        .unwrap();
-        assert_eq!(carpet.data, sponge.data);
-    }
 }

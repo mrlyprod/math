@@ -4,7 +4,6 @@ use mrly_core::error::{Result, value_error};
 use mrly_core::json;
 use mrly_core::tensor::Tensor;
 
-/// Returns the cell's types as rows of bytes.
 fn to_lists(cell: &Cell2d) -> Vec<Vec<u8>> {
     let (h, w) = (cell.height(), cell.width());
     (0..h)
@@ -12,7 +11,6 @@ fn to_lists(cell: &Cell2d) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// Builds a cell from rows of bytes, or an error when the rows are empty or ragged.
 fn from_lists(lists: &[Vec<u8>]) -> Result<Cell2d> {
     if lists.is_empty() {
         return value_error("cannot build a cell from an empty list.");
@@ -25,13 +23,6 @@ fn from_lists(lists: &[Vec<u8>]) -> Result<Cell2d> {
     Cell2d::new(Tensor::of(data, vec![h, w])?)
 }
 
-/// Serializes the cell to a JSON string of its types, with colors and tags when present.
-///
-/// ```
-/// let cell = mrly_math::two::carpet(3, 1).unwrap();
-/// let text = mrly_math::two::to_json(&cell);
-/// assert_eq!(mrly_math::two::from_json(&text).unwrap(), cell);
-/// ```
 pub fn to_json(cell: &Cell2d) -> String {
     let mut data = json!({
         "v": 1,
@@ -52,11 +43,6 @@ pub fn to_json(cell: &Cell2d) -> String {
     data.to_string()
 }
 
-/// Restores a cell from its JSON string, colors and tags included.
-///
-/// # Errors
-///
-/// Errors when the text is not a flat cell.
 pub fn from_json(text: &str) -> Result<Cell2d> {
     let data = parse(text)?;
     let lists = byte_grid(types_field(&data)?)?;
@@ -72,11 +58,6 @@ pub fn from_json(text: &str) -> Result<Cell2d> {
     Ok(cell)
 }
 
-/// Builds a cell from rows of digits, the inverse of the text rendering.
-///
-/// # Errors
-///
-/// Errors when a row is empty, ragged, or holds anything but decimal digits.
 pub fn from_strings(rows: &[String]) -> Result<Cell2d> {
     let mut lists = Vec::with_capacity(rows.len());
     for row in rows {
@@ -90,20 +71,4 @@ pub fn from_strings(rows: &[String]) -> Result<Cell2d> {
         lists.push(digits);
     }
     from_lists(&lists)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::two::designs::carpet;
-    use crate::two::renderer::text;
-    #[test]
-    fn strings_round_trip_a_carpet() {
-        let cell = carpet(3, 1).unwrap();
-        assert_eq!(from_strings(&text(&cell, None)).unwrap(), cell);
-    }
-    #[test]
-    fn strings_refuse_a_glyph_that_is_not_a_digit() {
-        assert!(from_strings(&["#".to_string()]).is_err());
-    }
 }

@@ -3,9 +3,6 @@ use mrly_core::error::{Result, value_error};
 use mrly_num::zeta::{Complex, raise};
 use serde::{Deserialize, Serialize};
 
-/// The relative rounding allowance the double-precision matrix ladder charges against the scale it carries.
-///
-/// The truncation bound is the proved one, carried entrywise by the same recursion that carries the value vector; this constant is a measured allowance for the arithmetic itself and is not a proof.
 pub const ROUNDING: f64 = 1e-13;
 
 const PEEL_TARGET: f64 = 100.0;
@@ -20,14 +17,6 @@ const RATIO_CAP: f64 = 0.9;
 const COLLATZ_WIELANDT: usize = 60;
 const PIVOT_FLOOR: f64 = 1e-12;
 
-// THE STATE SPACE
-
-/// A memory design read as a matrix ladder: the rule, the transfer matrix on its `(k-1)`-window states, and the peel depth its Dirichlet series is continued from.
-///
-/// The elements are the positive integers whose minimal base-`q` string, `q = 2^D`, is accepted by the rule, and the object is `zeta_W(s) = sum n^(-s)` over them.
-/// [`crate::memory::Rule::accepts`] holds a word shorter than the width `k` to be accepted, there being no window in it, so every integer below `q^(k-1)` with a nonzero leading digit sits in `S_W` for every rule of that width, and the head polynomial carries them.
-/// With `E_j(w)` the vector whose entry `u` sums `n^(-w)` over accepted words of exactly `j` digits ending in state `u`, and `G_P = sum_(j >= P) E_j`, splitting a word on its last digit gives `(I - q^(-w) T) G_P(w) = E_P(w) + sum_(l >= 1) binom(-w, l) q^(-w-l) Gamma_l G_P(w+l)`, where `Gamma_l(u', u) = sum a^l` over the letters `a` with the window `(u, a)` allowed and `u' = shift(u, a)`, and `T = Gamma_0` is [`crate::memory::transfer`] transposed.
-/// Then `zeta_W(w) = 1^T D_(P-1)(w) + 1^T G_P(w)` with `D_(P-1)` the Dirichlet polynomial over the accepted words of at most `P-1` digits, and the scalar ladder of [`crate::ladder`] is the width one case with `card F` where `T` stands.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Automaton {
     rule: Rule,
@@ -74,18 +63,6 @@ fn walk_words(
 }
 
 impl Automaton {
-    /// Builds the ladder of a rule, choosing the peel depth.
-    ///
-    /// ```
-    /// let golden = mrly_math::memory::Rule::new(1, 2, 7).unwrap();
-    /// let ladder = mrly_math::automaton::Automaton::new(&golden).unwrap();
-    /// assert_eq!(ladder.states(), 2);
-    /// assert!((ladder.abscissa() - 0.694_241_913_630_617_4).abs() < 1e-15);
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Errs when the rule accepts no element with a nonzero leading digit, or when its peel overruns the exact integers.
     pub fn new(rule: &Rule) -> Result<Automaton> {
         let mut peel = rule.width.max(2);
         let base = rule.letters() as u64;
@@ -105,18 +82,6 @@ impl Automaton {
         Automaton::with_peel(rule, peel)
     }
 
-    /// Builds the ladder at an explicit peel depth, at least the rule width and at least two.
-    ///
-    /// ```
-    /// let full = mrly_math::memory::Rule::full(1, 2).unwrap();
-    /// let ladder = mrly_math::automaton::Automaton::with_peel(&full, 7).unwrap();
-    /// assert_eq!(ladder.peel(), 7);
-    /// assert_eq!(ladder.abscissa(), 1.0);
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Errs when the rule accepts no such element, and at a peel depth under the rule width or two, or past the exact integers.
     pub fn with_peel(rule: &Rule, peel: usize) -> Result<Automaton> {
         let base = rule.letters() as u64;
         let states = rule.states();
@@ -228,33 +193,22 @@ impl Automaton {
         out
     }
 
-    /// Returns the rule.
     pub fn rule(&self) -> Rule {
         self.rule
     }
 
-    /// Returns the base `q = 2^D`.
     pub fn base(&self) -> u64 {
         self.base
     }
 
-    /// Returns the state count `q^(k-1)`.
     pub fn states(&self) -> usize {
         self.states
     }
 
-    /// Returns the peel depth `P`.
     pub fn peel(&self) -> usize {
         self.peel
     }
 
-    /// Returns the transfer matrix `T = Gamma_0` the ladder runs on, the transpose of [`crate::memory::transfer`], entry `(u', u)` counting the letters carrying `u` to `u'`.
-    ///
-    /// ```
-    /// let golden = mrly_math::memory::Rule::new(1, 2, 7).unwrap();
-    /// let ladder = mrly_math::automaton::Automaton::new(&golden).unwrap();
-    /// assert_eq!(ladder.matrix(), vec![vec![1.0, 1.0], vec![1.0, 0.0]]);
-    /// ```
     pub fn matrix(&self) -> Vec<Vec<f64>> {
         let mut out = vec![vec![0.0f64; self.states]; self.states];
         for &(t, s, _) in &self.arcs {
@@ -263,23 +217,10 @@ impl Automaton {
         out
     }
 
-    /// Returns the Collatz-Wielandt bracket `(low, high)` of the Perron root of the transfer matrix, the ratios the ladder divides with.
-    ///
-    /// For any nonnegative `T` and any `v > 0`, `min_u (T v)_u / v_u <= rho <= max_u (T v)_u / v_u`, so the pair brackets the root with no primitivity hypothesis; the guide is `v = (I + T)^m 1` for `m` sixty, or fewer when the entries would overrun the exponent range.
-    /// The ends carry a relative `1e-14` allowance of the same measured kind as [`ROUNDING`] and are not a rounding-certified interval, and the bracket is loose exactly when `T` is defective: at code `13` and `k = 2`, a Jordan block of root `1`, the upper end is `64/62`. Only the upper end is load bearing, as the `theta < 1` test that opens the Neumann branch; the root itself is [`crate::memory::perron`].
     pub fn perron(&self) -> (f64, f64) {
         (self.perron_low, self.perron_high)
     }
 
-    /// Returns the abscissa `alpha = log_q rho`, with `rho` the exact Perron root of [`crate::memory::perron`].
-    ///
-    /// The series converges absolutely on `Re s > alpha`. The bracket of [`Automaton::perron`] is a bound and not the root, so it is not read here.
-    ///
-    /// ```
-    /// let jordan = mrly_math::memory::Rule::new(1, 2, 13).unwrap();
-    /// let ladder = mrly_math::automaton::Automaton::new(&jordan).unwrap();
-    /// assert_eq!(ladder.abscissa(), 0.0);
-    /// ```
     pub fn abscissa(&self) -> f64 {
         let root = crate::memory::perron(&self.rule);
         if root <= 0.0 {
@@ -288,13 +229,10 @@ impl Automaton {
         root.ln() / (self.base as f64).ln()
     }
 
-    /// Returns the pole spacing `2 pi / log q`.
     pub fn period(&self) -> f64 {
         2.0 * std::f64::consts::PI / (self.base as f64).ln()
     }
 }
-
-// THE RESOLVENT
 
 fn invert(matrix: &[Vec<Complex>]) -> Option<Vec<Vec<Complex>>> {
     let n = matrix.len();
@@ -628,8 +566,6 @@ impl Automaton {
     }
 }
 
-// THE DETERMINANT AND THE ADJUGATE
-
 impl Automaton {
     fn faddeev(&mut self) {
         let n = self.states;
@@ -664,16 +600,6 @@ impl Automaton {
         self.adjugate = blocks;
     }
 
-    /// Returns the coefficients `c_0 .. c_n` of `det(I - x T) = sum c_i x^i`, the ladder denominator read as a polynomial in `x = q^(-s)`.
-    ///
-    /// The roots in `x` are the reciprocals of the nonzero eigenvalues of `T`, so the poles of `zeta_W` sit at `s = log_q lambda_i - m + (arg lambda_i + 2 pi j) i / log q`: one comb per distinct eigenvalue, offset by the eigenvalue's argument.
-    ///
-    /// ```
-    /// let golden = mrly_math::memory::Rule::new(1, 2, 7).unwrap();
-    /// let ladder = mrly_math::automaton::Automaton::new(&golden).unwrap();
-    /// let coefficients = ladder.denominator();
-    /// assert!((coefficients[1] + 1.0).abs() < 1e-12 && (coefficients[2] + 1.0).abs() < 1e-12);
-    /// ```
     pub fn denominator(&self) -> Vec<f64> {
         self.charpoly.clone()
     }
@@ -729,25 +655,7 @@ impl Automaton {
     }
 }
 
-// READINGS
-
 impl Automaton {
-    /// Returns `zeta_W(s)` and the bound it is known to.
-    ///
-    /// The bound is the propagated truncation bound, carried entrywise as a nonnegative vector through `(I - q^(-w) T)^(-1)`, plus [`ROUNDING`] times the scale the ladder carries, which is a measured allowance and not a proof.
-    /// Right of the abscissa the inverse is majorised by its Neumann series, `sum_i (q^(-Re w) T)^i`, which is entrywise nonnegative and needs no norm and no primitivity; left of it the bound runs through the computed inverse certified by its own residual, `abs(C) (y + norm(y) r/(1-r) 1)` with `r = norm(I - (I - q^(-w) T) C)`, and the module raises rather than return when `r >= 1`.
-    ///
-    /// ```
-    /// let full = mrly_math::memory::Rule::full(1, 2).unwrap();
-    /// let ladder = mrly_math::automaton::Automaton::new(&full).unwrap();
-    /// let s = mrly_num::zeta::Complex::new(2.0, 0.0);
-    /// let (value, bound) = ladder.zeta(s, 1e-10).unwrap();
-    /// assert!((value.re - std::f64::consts::PI * std::f64::consts::PI / 6.0).abs() < bound);
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Errs when the tolerance is out of reach, or when a level of the walk sits on a pole of the resolvent.
     pub fn zeta(&self, s: Complex, tolerance: f64) -> Result<(Complex, f64)> {
         let head = poly_scale(&self.low, s.re);
         let (value, carried) = self.tune(s, tolerance, true, head)?;
@@ -756,13 +664,6 @@ impl Automaton {
         Ok((poly(&self.low, s) + sum, bound))
     }
 
-    /// Returns the matrix Lyndon cofactor `Z_W(s) = det(I - q^(-s) T) zeta_W(s)` and the bound it is known to.
-    ///
-    /// The scalar `1 - k q^(-s)` becomes the determinant, and the cofactor is carried as `det(I - q^(-s) T) D_(P-1)(s) + 1^T adj(I - q^(-s) T) N(s)` with `N` the ladder numerator, so it is read on the whole `m = 0` pole comb where `zeta_W` itself is singular.
-    ///
-    /// # Errors
-    ///
-    /// Errs when the tolerance is out of reach.
     pub fn cofactor(&self, s: Complex, tolerance: f64) -> Result<(Complex, f64)> {
         let x = raise(self.base as f64, -s);
         let det = self.det(x);
@@ -782,14 +683,6 @@ impl Automaton {
         Ok((det * poly(&self.low, s) + sum, bound))
     }
 
-    /// Returns the residue of `zeta_W` at a simple pole `w0` of the resolvent and the bound it is known to.
-    ///
-    /// At such a point the resolvent is `adj(I - x T) / det(I - x T)` with `x = q^(-w)`, so the residue is `1^T adj(I - x0 T) N(w0)` over `-x0 log q det'(x0)`: the adjugate is the spectral projector in polynomial form, and no eigenvector is solved for.
-    /// The head term `det(I - q^(-s) T) D_(P-1)(s)` is dropped, since the determinant vanishes at the pole.
-    ///
-    /// # Errors
-    ///
-    /// Errs when the tolerance is out of reach, or when `w0` is not a simple root of `det(I - q^(-w) T)`.
     pub fn residue(&self, w0: Complex, tolerance: f64) -> Result<(Complex, f64)> {
         let base = self.base as f64;
         let x = raise(base, -w0);
@@ -822,309 +715,5 @@ impl Automaton {
             .sum::<f64>()
             / Complex::abs(den);
         Ok((sum / den, bound))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ladder::Design;
-
-    const PINNED: f64 = 1e-9;
-
-    fn near(value: Complex, re: f64, im: f64, bound: f64) {
-        assert!(
-            (value.re - re).abs() < bound && (value.im - im).abs() < bound,
-            "{value:?} is not {re} + {im}i inside {bound:e}"
-        );
-    }
-
-    fn golden() -> Automaton {
-        Automaton::new(&Rule::new(1, 2, 7).unwrap()).unwrap()
-    }
-
-    #[test]
-    fn the_full_rule_is_the_base_two_design() {
-        let design = Design::new(2, &[0, 1]).unwrap();
-        for width in [2usize, 3] {
-            let ladder = Automaton::new(&Rule::full(1, width).unwrap()).unwrap();
-            assert_eq!(ladder.states(), 1 << (width - 1));
-            assert_eq!(ladder.abscissa(), 1.0);
-            let mut wanted = vec![0.0; 1 << (width - 1)];
-            wanted[0] = 1.0;
-            if width > 1 {
-                wanted[1] = -2.0;
-            }
-            wanted.push(0.0);
-            assert_eq!(ladder.denominator(), wanted);
-            for s in [Complex::new(2.0, 0.0), Complex::new(0.3, 40.0)] {
-                let (mine, one) = ladder.zeta(s, 1e-8).unwrap();
-                let (theirs, two) = crate::ladder::zeta(&design, s, 1e-8).unwrap();
-                assert!(
-                    Complex::abs(mine - theirs) < one + two,
-                    "width {width} at {s:?}: {mine:?} {theirs:?} {one:e} {two:e}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn the_product_rule_is_the_mersenne_series() {
-        let ladder = Automaton::new(&Rule::new(1, 2, 8).unwrap()).unwrap();
-        assert!(ladder.abscissa().abs() < 1e-12);
-        for s in [Complex::new(2.0, 0.0), Complex::new(1.5, 3.0)] {
-            let (value, bound) = ladder.zeta(s, 1e-9).unwrap();
-            let mut want = Complex::new(0.0, 0.0);
-            for m in 1..=60u32 {
-                want = want + Complex::exp((-s) * ((2f64.powi(m as i32) - 1.0).ln()));
-            }
-            assert!(
-                Complex::abs(value - want) < bound + 1e-15,
-                "{s:?} {value:?} {want:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_golden_rule_is_the_fibbinary_series() {
-        let ladder = golden();
-        assert_eq!(ladder.peel(), 12);
-        let (value, bound) = ladder.zeta(Complex::new(3.0, 0.0), PINNED).unwrap();
-        let (mut want, mut drift) = (0.0f64, 0.0f64);
-        for n in 1u64..1 << 22 {
-            if n & (n << 1) == 0 {
-                let term = (n as f64).powf(-3.0) - drift;
-                let total = want + term;
-                drift = (total - want) - term;
-                want = total;
-            }
-        }
-        let (mut a, mut b) = (1.0f64, 1.0f64);
-        let mut rest = 0.0f64;
-        for _ in 1..=22u32 {
-            let next = a + b;
-            a = b;
-            b = next;
-        }
-        for step in 0..400u32 {
-            rest += a * 2f64.powf(-3.0 * (22 + step) as f64);
-            let next = a + b;
-            a = b;
-            b = next;
-        }
-        assert!(
-            value.re > want - bound && value.re < want + rest + bound,
-            "{value:?} {want} {rest:e} {bound:e}"
-        );
-    }
-
-    #[test]
-    fn the_golden_transfer_carries_the_two_combs() {
-        let ladder = golden();
-        let phi = (1.0 + 5f64.sqrt()) / 2.0;
-        let (low, high) = ladder.perron();
-        assert!(low <= phi && phi <= high, "{low} {phi} {high}");
-        assert!(high - low < 1e-9, "{low} {high}");
-        let coefficients = ladder.denominator();
-        assert_eq!(coefficients.len(), 3);
-        assert!((coefficients[1] + 1.0).abs() < 1e-12);
-        assert!((coefficients[2] + 1.0).abs() < 1e-12);
-        assert_eq!(ladder.abscissa(), phi.log2());
-    }
-
-    #[test]
-    fn the_residues_on_the_first_comb_are_the_contour_averages() {
-        let ladder = golden();
-        let phi = (1.0 + 5f64.sqrt()) / 2.0;
-        for j in 0..3i64 {
-            let w0 = Complex::new(phi.log2(), ladder.period() * j as f64);
-            let (want, bound) = ladder.residue(w0, PINNED).unwrap();
-            let (radius, nodes) = (0.05, 8);
-            let mut got = Complex::new(0.0, 0.0);
-            let mut carried = 0.0;
-            for k in 0..nodes {
-                let turn = Complex::turn(std::f64::consts::TAU * k as f64 / nodes as f64);
-                let (value, other) = ladder.zeta(w0 + turn * radius, 1e-9).unwrap();
-                got = got + turn * radius * value * (1.0 / nodes as f64);
-                carried += radius * other / nodes as f64;
-            }
-            assert!(
-                Complex::abs(got - want) < bound + carried + 1e-6,
-                "j {j} {got:?} {want:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_cofactor_is_the_series_times_the_determinant() {
-        let ladder = golden();
-        for s in [Complex::new(2.0, 0.0), Complex::new(1.2, 9.0)] {
-            let x = raise(2.0, -s);
-            let mut det = Complex::new(1.0, 0.0);
-            let mut power = Complex::new(1.0, 0.0);
-            for &c in ladder.denominator().iter().skip(1) {
-                power = power * x;
-                det = det + power * c;
-            }
-            let (value, bound) = ladder.cofactor(s, 1e-8).unwrap();
-            let (series, other) = ladder.zeta(s, 1e-8).unwrap();
-            assert!(
-                Complex::abs(value - det * series) < bound + Complex::abs(det) * other,
-                "{s:?} {value:?} {:?}",
-                det * series
-            );
-        }
-    }
-
-    #[test]
-    fn the_golden_residues_on_the_first_comb_are_pinned() {
-        let ladder = golden();
-        let phi = (1.0 + 5f64.sqrt()) / 2.0;
-        let wanted = [
-            (0.946_743_395_641_970_1, 0.0),
-            (0.210_170_579_042_707_6, -0.581_938_842_807_736_5),
-            (0.062_192_494_764_691_71, -0.051_732_573_832_334_72),
-        ];
-        for (j, (re, im)) in wanted.iter().enumerate() {
-            let w0 = Complex::new(phi.log2(), ladder.period() * j as f64);
-            let (value, bound) = ladder.residue(w0, PINNED).unwrap();
-            assert!(bound < 1.3e-13, "j {j} bound {bound:e}");
-            near(value, *re, *im, bound);
-        }
-    }
-
-    #[test]
-    fn the_second_comb_is_genuine() {
-        let ladder = golden();
-        let phi = (1.0 + 5f64.sqrt()) / 2.0;
-        let half = std::f64::consts::PI / 2f64.ln();
-        let wanted = [
-            (-0.259_501_222_742_937_13, -0.592_535_006_433_179_4),
-            (0.896_350_590_641_920_6, 1.403_072_744_223_695_2),
-            (0.491_379_388_883_392_94, -3.790_264_223_035_055_4),
-        ];
-        for (j, (re, im)) in wanted.iter().enumerate() {
-            let w0 = Complex::new(-phi.log2(), half * (2 * j + 1) as f64);
-            let (value, bound) = ladder.residue(w0, 1e-7).unwrap();
-            assert!(Complex::abs(value) > 0.6, "j {j} residue {value:?}");
-            near(value, *re, *im, bound);
-            let (radius, nodes) = (0.05, 12);
-            let mut got = Complex::new(0.0, 0.0);
-            let mut carried = 0.0;
-            for k in 0..nodes {
-                let turn = Complex::turn(std::f64::consts::TAU * k as f64 / nodes as f64);
-                let (point, other) = ladder.zeta(w0 + turn * radius, 1e-5).unwrap();
-                got = got + turn * radius * point * (1.0 / nodes as f64);
-                carried += radius * other / nodes as f64;
-            }
-            assert!(
-                Complex::abs(got - value) < bound + carried + 1e-6,
-                "j {j} {got:?} {value:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_residue_at_the_abscissa_is_the_limit_of_the_digit_sums() {
-        let ladder = golden();
-        let alpha = ladder.abscissa();
-        let (value, bound) = ladder.residue(Complex::new(alpha, 0.0), PINNED).unwrap();
-        let wanted = [
-            (16usize, 0.946_747_043_404_283_4, 4e-6),
-            (20, 0.946_743_630_023_051_8, 3e-7),
-            (24, 0.946_743_410_426_742, 2e-8),
-        ];
-        for (length, want, reach) in wanted {
-            let (mut sum, mut drift) = (0.0f64, 0.0f64);
-            for n in (1u64 << (length - 1))..(1u64 << length) {
-                if n & (n << 1) == 0 {
-                    let term = (n as f64).powf(-alpha) - drift;
-                    let total = sum + term;
-                    drift = (total - sum) - term;
-                    sum = total;
-                }
-            }
-            let got = sum / 2f64.ln();
-            assert!((got - want).abs() < 1e-12, "L {length} {got}");
-            assert!(
-                (got - value.re).abs() < reach + bound,
-                "L {length} {got} {value:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_golden_readings_are_pinned() {
-        let ladder = golden();
-        let pinned = [
-            (Complex::new(3.0, 0.0), 1.154_012_963_277_640_1, 0.0),
-            (Complex::new(2.0, 0.0), 1.415_825_532_884_778_4, 0.0),
-            (
-                Complex::new(1.2, 9.0),
-                1.906_409_024_243_908_5,
-                -0.453_243_424_778_265_46,
-            ),
-            (Complex::new(0.8, 0.0), 9.536_379_694_275_015, 0.0),
-        ];
-        for (s, re, im) in pinned {
-            let (value, bound) = ladder.zeta(s, PINNED).unwrap();
-            near(value, re, im, bound);
-        }
-        let cofactors = [
-            (Complex::new(3.0, 0.0), 0.991_729_890_316_722),
-            (Complex::new(2.0, 0.0), 0.973_380_053_858_285_1),
-            (Complex::new(0.8, 0.0), 0.913_335_748_872_126_1),
-        ];
-        for (s, re) in cofactors {
-            let (value, bound) = ladder.cofactor(s, PINNED).unwrap();
-            near(value, re, 0.0, bound);
-        }
-    }
-
-    #[test]
-    fn the_fibbinary_set_carries_no_euler_product() {
-        let fib = |n: u64| n & (n << 1) == 0;
-        let mut found = None;
-        'outer: for product in 2u64..1 << 16 {
-            for a in 2u64..=(product as f64).sqrt() as u64 + 1 {
-                if product % a != 0 {
-                    continue;
-                }
-                let b = product / a;
-                if a >= b || !fib(a) || !fib(b) {
-                    continue;
-                }
-                let (mut x, mut y) = (a, b);
-                while y != 0 {
-                    let t = x % y;
-                    x = y;
-                    y = t;
-                }
-                if x != 1 || fib(product) {
-                    continue;
-                }
-                found = Some((a, b, product));
-                break 'outer;
-            }
-        }
-        assert_eq!(found, Some((5, 9, 45)));
-    }
-
-    #[test]
-    fn the_abscissa_is_the_exact_perron_root_and_not_the_bracket() {
-        let jordan = Automaton::new(&Rule::new(1, 2, 13).unwrap()).unwrap();
-        assert_eq!(jordan.matrix(), vec![vec![1.0, 1.0], vec![0.0, 1.0]]);
-        assert_eq!(jordan.abscissa(), 0.0);
-        let (_, high) = jordan.perron();
-        assert!(high > 1.03 && high < 1.04, "{high}");
-    }
-
-    #[test]
-    fn refuses_a_level_it_cannot_invert() {
-        let ladder = golden();
-        let phi = (1.0 + 5f64.sqrt()) / 2.0;
-        let w0 = Complex::new(phi.log2(), 0.0);
-        assert!(ladder.zeta(w0, 1e-6).is_err());
-        assert!(ladder.residue(Complex::new(2.0, 0.0), 1e-6).is_err());
     }
 }

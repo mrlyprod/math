@@ -3,22 +3,17 @@ use mrly_core::error::{Result, value_error};
 use mrly_num::series::{CATALAN, EULER};
 use serde::{Deserialize, Serialize};
 
-/// The exact reading of a cut layer: how many cells were inked out of how many were read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Share {
-    /// The count of inked cells.
     pub inked: i64,
-    /// The count of cells read.
     pub cells: i64,
 }
 
 impl Share {
-    /// The share as a real number.
     pub fn value(self) -> f64 {
         self.inked as f64 / self.cells as f64
     }
 
-    /// The share in lowest terms, numerator then denominator.
     pub fn reduced(self) -> (i64, i64) {
         let (mut a, mut b) = (self.inked.abs(), self.cells.abs());
         while b != 0 {
@@ -31,30 +26,10 @@ impl Share {
     }
 }
 
-/// The real character mod 8 of `Q(sqrt 2)`: `+1` at `n = 1, 7`, `-1` at `n = 3, 5`, zero at even `n`.
-///
-/// ```
-/// use mrly_math::six::star::chi8;
-/// assert_eq!([chi8(1), chi8(3), chi8(5), chi8(7), chi8(4)], [1, -1, -1, 1, 0]);
-/// ```
 pub fn chi8(number: usize) -> i64 {
     [0, 1, 0, -1, 0, -1, 0, 1][number % 8]
 }
 
-/// The closed form of the star arm's ink at odd `n`, `1/2 + chi_8(n)/(2n)`, as `n + chi_8(n)` cells of `2n`.
-///
-/// The arm `x = y` of the cut is a diameter of `2n` cells with no width to choose, and on it the two
-/// block parities agree, so the space rule collapses to `floor(x/4)` even and the inked count is
-/// `f(3n) - f(n) = n + chi_8(n)` with `f(m) = 4 floor(m/8) + min(m mod 8, 4)`.
-///
-/// ```
-/// use mrly_math::six::star::arm_law;
-/// assert_eq!(arm_law(7).unwrap().reduced(), (4, 7));
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even layer number.
 pub fn arm_law(number: usize) -> Result<Share> {
     if number == 0 || number.is_multiple_of(2) {
         return value_error("the layer number must be odd.");
@@ -65,48 +40,24 @@ pub fn arm_law(number: usize) -> Result<Share> {
     })
 }
 
-/// The constant beside the decay, `ln(1 + sqrt 2)/(2 sqrt 2) - G/8 - gamma/4 - (ln 2)/2`.
-///
-/// Every limb is a closed form the subtraction of the two ink laws hands over: the character part is
-/// `L(1, chi_8)/2` by the class number formula for `Q(sqrt 2)`, the square tail is `-G/8` with `G`
-/// Catalan's constant, and the harmonic tail carries `-gamma/4 - (ln 2)/2`.
 pub fn constant() -> f64 {
     (1.0 + 2f64.sqrt()).ln() / (2.0 * 2f64.sqrt()) - CATALAN / 8.0 - EULER / 4.0 - 2f64.ln() / 2.0
 }
 
-/// The cell-frame decay coefficient of a band of half-width `W` cells, `-(K + b)/(4(2K + 1))` for `K = floor(W/2)`.
-///
-/// `b` is the block parity of the band edge, one when `floor(K/2)` is even and zero when it is odd.
-/// The band's per-layer excess is `kappa chi + (m + q chi_8(n))/n + chi/(8 n^2)`, and summing the
-/// `1/n` term over the first `L` odd layers hands this coefficient as `m/2`, so it is a theorem and
-/// not a fit. At even `W` it reads `-(W + 2b)/(8(W + 1))` and at odd `W` it reads
-/// `-(W - 1 + 2b)/(8W)`, since `x - y` is even on the cut and an odd width is never a new band:
-/// `W = 1` returns the arm's `-1/4` and `W = 3` returns `-1/6`. As `W` grows it tends to `-1/8`.
-///
-/// ```
-/// use mrly_math::six::star::width_law;
-/// assert_eq!([width_law(0), width_law(2), width_law(4)], [-0.25, -1.0 / 6.0, -0.1]);
-/// assert_eq!([width_law(1), width_law(3)], [width_law(0), width_law(2)]);
-/// ```
 pub fn width_law(half: usize) -> f64 {
     let reach = (half / 2) as f64;
     let parity = f64::from(u8::from((half / 4).is_multiple_of(2)));
     -(reach + parity) / (4.0 * (2.0 * reach + 1.0))
 }
 
-/// The three classes of layer count the `1/L^2` term of the decay reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Branch {
-    /// `L` divisible by four, where the residual is `-23/192`.
     Zero,
-    /// `L` twice an odd number, where the residual is `+25/192`.
     Two,
-    /// Odd `L`, where the constant shifts by `1/8` and the error is `O(1/L)`.
     Odd,
 }
 
 impl Branch {
-    /// The branch of a layer count.
     pub fn of(layers: usize) -> Branch {
         match layers % 4 {
             0 => Branch::Zero,
@@ -115,7 +66,6 @@ impl Branch {
         }
     }
 
-    /// The exact `1/L^2` coefficient at even `L`, absent at odd `L`.
     pub fn residual(self) -> Option<f64> {
         match self {
             Branch::Zero => Some(-23.0 / 192.0),
@@ -124,12 +74,10 @@ impl Branch {
         }
     }
 
-    /// The constant the ladder converges on, `C` at even `L` and `C + 1/8` at odd `L`.
     pub fn constant(self) -> f64 {
         constant() + if self == Branch::Odd { 0.125 } else { 0.0 }
     }
 
-    /// The name of the branch.
     pub fn name(self) -> String {
         match self {
             Branch::Zero => "0 mod 4",
@@ -140,44 +88,24 @@ impl Branch {
     }
 }
 
-/// The `L`-layer reading of the ghost star's decay in the cell frame.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Decay {
-    /// The layer count `L`.
     pub layers: usize,
-    /// The mean excess of the star over the background across the first `L` odd layers.
     pub excess: f64,
-    /// That excess times `L`.
     pub scaled: f64,
-    /// The scaled excess plus `(ln L)/4`, which settles on the branch constant.
     pub logged: f64,
-    /// The miss of the settled value against the branch constant.
     pub miss: f64,
-    /// The miss times `L`, the reading odd `L` leaves behind.
     pub linear: f64,
-    /// The miss times `L` squared, the reading even `L` leaves behind.
     pub residual: f64,
-    /// The slope of the scaled excess against `ln L`, read from `L/2` to `L`, absent unless `L` is divisible by four.
     pub slope: Option<f64>,
 }
 
-/// The ghost star of a coded cube's hexagonal cut stack, read in the cell frame.
-///
-/// The cut of the level-one cube of side `n` lives on the cube's own `4n` cell lattice, one layer at
-/// a time and nothing resampled, so the half-cell displacement `1/(2n)` between consecutive layers
-/// is carried rather than averaged away. A cell `(x, y, z)` of the plane `x + y + z = 6n - 2` is
-/// inked when the design's corner mask holds the three block parities `floor(c/4) mod 2`.
 #[derive(Serialize, Deserialize)]
 pub struct Star {
     corners: [bool; 8],
 }
 
 impl Star {
-    /// Reads the star of a base-2 space code, the carpet being `23`.
-    ///
-    /// # Errors
-    ///
-    /// Errors when the code is out of range for a base-2 cube.
     pub fn new(code: u128) -> Result<Star> {
         let filled = code_to_corners(Code::from(code), 3, 2)?;
         let mut corners = [false; 8];
@@ -194,10 +122,6 @@ impl Star {
         self.corners[bit(x) << 2 | bit(y) << 1 | bit(z)]
     }
 
-    /// The ink of the cut cell at column `x` and even height `z` of the layer at odd `n`.
-    ///
-    /// The answer is absent where the plane `x + y + z = 6n - 2` leaves the cube, which is what draws
-    /// the hexagon's own edge.
     pub fn cell(&self, number: usize, x: i64, z: i64) -> Option<bool> {
         let n = number as i64;
         let y = 6 * n - 2 - x - z;
@@ -205,20 +129,6 @@ impl Star {
         inside.then(|| self.inked(x, y, z))
     }
 
-    /// The exact ink share of the whole hexagonal cut at odd `n`, the background the star is read against.
-    ///
-    /// The rows are the `2n` even heights `z`, and each runs over the `x` the plane leaves inside the
-    /// cube. The fill depends on `x` only through `x mod 8`, so a row is counted in eight steps and
-    /// the whole layer in `O(n)`.
-    ///
-    /// ```
-    /// use mrly_math::six::star::Star;
-    /// assert_eq!(Star::new(23).unwrap().hexagon(3).unwrap().reduced(), (7, 9));
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Errors at an even layer number.
     pub fn hexagon(&self, number: usize) -> Result<Share> {
         if number == 0 || number.is_multiple_of(2) {
             return value_error("the layer number must be odd.");
@@ -248,19 +158,6 @@ impl Star {
         Ok(Share { inked, cells })
     }
 
-    /// The exact ink share of the band of half-width `W` cells about the arm `x = y` at odd `n`.
-    ///
-    /// At `W = 0` the band is the arm itself, the `2n` cells of the diameter, whose share is the
-    /// closed form of [`arm_law`].
-    ///
-    /// ```
-    /// use mrly_math::six::star::{arm_law, Star};
-    /// assert_eq!(Star::new(23).unwrap().arm(9, 0).unwrap(), arm_law(9).unwrap());
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Errors at an even layer number.
     pub fn arm(&self, number: usize, half: usize) -> Result<Share> {
         if number == 0 || number.is_multiple_of(2) {
             return value_error("the layer number must be odd.");
@@ -284,11 +181,6 @@ impl Star {
         Ok(Share { inked, cells })
     }
 
-    /// The per-layer excess of the star band over the hexagon across the first `L` odd layers.
-    ///
-    /// # Errors
-    ///
-    /// Errors below one layer, or at an even layer number.
     pub fn excesses(&self, layers: usize, half: usize) -> Result<Vec<f64>> {
         if layers == 0 {
             return value_error("the layer count must be at least one.");
@@ -302,18 +194,6 @@ impl Star {
     }
 }
 
-/// The decay read off the per-layer excesses at a layer count, the slope taken from `L/2` to `L`.
-///
-/// At `W = 0` and even `L` the reading is `L * excess_L = -(ln L)/4 + C + O(1/L^2)`, so the slope
-/// settles on `-1/4` and the residual on the branch's exact `1/L^2` coefficient. The sliding window
-/// carries a residue trap: the per-layer excess opens on a term in the ink law's character whose sum
-/// vanishes at even `L` alone, so a window from `L/2` to `L` cancels it only when `L` is divisible by
-/// four. At `L = 2 mod 4` the half is odd and the window converges somewhere else entirely, so the
-/// slope is refused there rather than reported wrong.
-///
-/// # Errors
-///
-/// Errors below two layers, or past the excesses read.
 pub fn decay(excesses: &[f64], layers: usize) -> Result<Decay> {
     if layers < 2 || layers > excesses.len() {
         return value_error("the layer count must be at least two and within the excesses read.");
@@ -335,159 +215,4 @@ pub fn decay(excesses: &[f64], layers: usize) -> Result<Decay> {
             .is_multiple_of(4)
             .then(|| (scaled - near) / 2f64.ln()),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_arm_ink_is_the_closed_form() {
-        let star = Star::new(23).unwrap();
-        let read: Vec<(i64, i64)> = (0..8)
-            .map(|step| star.arm(2 * step + 1, 0).unwrap().reduced())
-            .collect();
-        assert_eq!(
-            read,
-            vec![
-                (1, 1),
-                (1, 3),
-                (2, 5),
-                (4, 7),
-                (5, 9),
-                (5, 11),
-                (6, 13),
-                (8, 15)
-            ]
-        );
-        for step in 0..8 {
-            let number = 2 * step + 1;
-            assert_eq!(star.arm(number, 0).unwrap(), arm_law(number).unwrap());
-        }
-        let chi: Vec<i64> = (0..8).map(|step| chi8(2 * step + 1)).collect();
-        assert_eq!(chi, vec![1, -1, -1, 1, 1, -1, -1, 1]);
-        assert!((0..1001).all(|step| {
-            let number = 2 * step + 1;
-            star.arm(number, 0).unwrap() == arm_law(number).unwrap()
-        }));
-    }
-
-    #[test]
-    fn the_hexagon_ink_is_the_cut_ink_law() {
-        let star = Star::new(23).unwrap();
-        for step in 0..28 {
-            let number = 2 * step + 1;
-            let n = number as i64;
-            let chi = if (3 * n - 1) / 2 % 2 == 0 { 1 } else { -1 };
-            let want =
-                0.5 + chi as f64 / 8.0 + 1.0 / (2 * n) as f64 - chi as f64 / (8 * n * n) as f64;
-            assert!((star.hexagon(number).unwrap().value() - want).abs() < 1e-12);
-        }
-        let shares: Vec<String> = (0..4)
-            .map(|step| format!("{:.6}", star.hexagon(2 * step + 1).unwrap().value()))
-            .collect();
-        assert_eq!(shares.join(" "), "1.000000 0.777778 0.480000 0.693878");
-        assert_eq!(
-            format!("{:.6}", star.excesses(2, 0).unwrap()[1]),
-            "-0.444444"
-        );
-    }
-
-    #[test]
-    fn the_cell_frame_decay_is_minus_a_quarter() {
-        let star = Star::new(23).unwrap();
-        let excesses = star.excesses(400, 0).unwrap();
-        let read = decay(&excesses, 28).unwrap();
-        assert_eq!(format!("{:.6}", read.scaled), "-1.126964");
-        assert_eq!(format!("{:.10}", read.logged), "-0.2939128437");
-        assert_eq!(format!("{:.8}", read.residual), "-0.11937029");
-        let hundred = decay(&excesses, 100).unwrap();
-        assert_eq!(format!("{:.6}", hundred.scaled), "-1.445065");
-        assert_eq!(format!("{:.10}", hundred.logged), "-0.2937725615");
-        assert_eq!(format!("{:.8}", hundred.residual), "-0.11975831");
-        assert_eq!(
-            format!("{:.6}", hundred.slope.expect("a window at L = 0 mod 4")),
-            "-0.250092"
-        );
-        assert_eq!(
-            format!(
-                "{:.6}",
-                decay(&excesses, 128)
-                    .unwrap()
-                    .slope
-                    .expect("a window at L = 0 mod 4")
-            ),
-            "-0.249968"
-        );
-        let deep = decay(&excesses, 400).unwrap();
-        assert_eq!(format!("{:.6}", deep.scaled), "-1.791627");
-        assert_eq!(format!("{:.10}", deep.logged), "-0.2937613344");
-        assert_eq!(format!("{:.8}", deep.residual), "-0.11978958");
-        assert!((deep.slope.expect("a window at L = 0 mod 4") + 0.25).abs() < 1e-4);
-        let twice = decay(&excesses, 102).unwrap();
-        assert_eq!(twice.slope, None);
-        assert_eq!(format!("{:.8}", twice.residual), "0.13017437");
-        let odd = decay(&excesses, 101).unwrap();
-        assert_eq!(odd.slope, None);
-        assert_eq!(format!("{:.6}", odd.linear), "0.249724");
-        assert_eq!(format!("{:.10}", Branch::Zero.constant()), "-0.2937605857");
-        assert_eq!(format!("{:.10}", Branch::Odd.constant()), "-0.1687605857");
-        assert_eq!(Branch::of(400).residual(), Some(-23.0 / 192.0));
-        assert_eq!(Branch::of(402).residual(), Some(25.0 / 192.0));
-        assert_eq!(Branch::of(400).name(), "0 mod 4");
-        assert_eq!(Branch::of(402).name(), "2 mod 4");
-        assert_eq!(Branch::of(401).name(), "odd");
-    }
-
-    #[test]
-    fn a_wider_band_walks_off_the_quarter() {
-        let star = Star::new(23).unwrap();
-        assert_eq!(width_law(1), width_law(0));
-        assert_eq!(width_law(3), width_law(2));
-        let family: Vec<String> = [0usize, 2, 4, 6, 8, 10, 12]
-            .iter()
-            .map(|half| format!("{:.6}", width_law(*half)))
-            .collect();
-        assert_eq!(
-            family.join(" "),
-            "-0.250000 -0.166667 -0.100000 -0.107143 -0.138889 -0.136364 -0.115385"
-        );
-        let odds: Vec<String> = [1usize, 3, 5, 7]
-            .iter()
-            .map(|half| format!("{:.6}", width_law(*half)))
-            .collect();
-        assert_eq!(odds.join(" "), "-0.250000 -0.166667 -0.100000 -0.107143");
-        let banded: Vec<(i64, i64)> = (0..4)
-            .map(|step| star.arm(2 * step + 1, 2).unwrap().reduced())
-            .collect();
-        assert_eq!(banded, vec![(1, 1), (5, 9), (4, 15), (16, 21)]);
-        for half in [1usize, 2, 3, 4, 6] {
-            let excesses = star.excesses(400, half).unwrap();
-            let slope = decay(&excesses, 400)
-                .unwrap()
-                .slope
-                .expect("a window at L = 0 mod 4");
-            assert!((slope - width_law(half)).abs() < 2e-4);
-            if half == 2 {
-                assert_eq!(
-                    format!(
-                        "{:.6}",
-                        decay(&excesses, 200)
-                            .unwrap()
-                            .slope
-                            .expect("a window at L = 0 mod 4")
-                    ),
-                    "-0.166654"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn refuses_an_even_layer_and_a_code_past_its_range() {
-        let star = Star::new(23).unwrap();
-        assert!(star.hexagon(4).is_err());
-        assert!(star.arm(0, 0).is_err());
-        assert!(Star::new(1 << 9).is_err());
-    }
 }

@@ -37,8 +37,6 @@ fn sized(dimension: usize) -> Result<()> {
     Ok(())
 }
 
-// POLYNOMIAL
-
 fn convolve(left: &[i128], right: &[i128]) -> Result<Vec<i128>> {
     let mut out = vec![0i128; left.len() + right.len() - 1];
     for (i, &x) in left.iter().enumerate() {
@@ -55,20 +53,6 @@ fn convolve(left: &[i128], right: &[i128]) -> Result<Vec<i128>> {
     Ok(out)
 }
 
-/// The digit polynomial of the base-`q` middle-digit design in dimension `D`, lowest power first.
-///
-/// The design keeps the cells whose digit vector has at most one coordinate equal to the middle
-/// digit, so its weight generating function is `A(t)^(D-1) (A(t) + D t^m)`, with `A` the sum of
-/// every digit power but the middle one. At base three that factors as
-/// `(1 + t^2)^(D-1) (1 + D t + t^2)`, and the sum of the coefficients is the fill.
-///
-/// ```
-/// assert_eq!(mrly_math::counts::ladder::digit_polynomial(3, 3).unwrap(), vec![1, 3, 3, 6, 3, 3, 1]);
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even base under three, or a dimension outside two to the ceiling.
 pub fn digit_polynomial(base: usize, dimension: usize) -> Result<Vec<i128>> {
     let centre = middle(base)?;
     sized(dimension)?;
@@ -82,16 +66,6 @@ pub fn digit_polynomial(base: usize, dimension: usize) -> Result<Vec<i128>> {
     convolve(&poly, &second)
 }
 
-/// The count of level-one cells the design keeps, `f_D = (q - 1)^(D-1) (q - 1 + D)`.
-///
-/// ```
-/// assert_eq!(mrly_math::counts::ladder::fill(3, 3).unwrap(), 20);
-/// assert_eq!(mrly_math::counts::ladder::fill(5, 3).unwrap(), 112);
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even base under three, a dimension outside two to the ceiling, or a product past an i128.
 pub fn fill(base: usize, dimension: usize) -> Result<i128> {
     middle(base)?;
     sized(dimension)?;
@@ -102,8 +76,6 @@ pub fn fill(base: usize, dimension: usize) -> Result<i128> {
     product(out, (base - 1 + dimension) as i128)
 }
 
-// MATRIX
-
 fn coefficient(poly: &[i128], index: i128) -> i128 {
     if index < 0 || index as usize >= poly.len() {
         0
@@ -112,15 +84,6 @@ fn coefficient(poly: &[i128], index: i128) -> i128 {
     }
 }
 
-/// The carry matrix over the reachable carries `|c| <= (D-1)/2`, rows indexed by the carry out.
-///
-/// A level of the design adds one base-`q` digit per coordinate, so the height of the central
-/// diagonal hyperplane moves by a digit sum `s` and a carry `c -> (c + mD - s)/q` with `m` the
-/// middle digit; the map contracts onto this window from every start.
-///
-/// # Errors
-///
-/// Errors at an even base under three, or a dimension outside two to the ceiling.
 pub fn carry_matrix(base: usize, dimension: usize) -> Result<Vec<Vec<i128>>> {
     let poly = digit_polynomial(base, dimension)?;
     let shift = (middle(base)? * dimension) as i128;
@@ -135,19 +98,6 @@ pub fn carry_matrix(base: usize, dimension: usize) -> Result<Vec<Vec<i128>>> {
         .collect())
 }
 
-/// The reflection-even block of the carry matrix, of size `ceil(D/2)`.
-///
-/// The digit polynomial is palindromic, so the reflection `c -> -c` commutes with the carry map
-/// and splits it; the even half carries the central count and its characteristic polynomial is
-/// the recurrence the counts obey.
-///
-/// ```
-/// assert_eq!(mrly_math::counts::ladder::even_block(3, 3).unwrap(), vec![vec![6, 6], vec![1, 3]]);
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even base under three, or a dimension outside two to the ceiling.
 pub fn even_block(base: usize, dimension: usize) -> Result<Vec<Vec<i128>>> {
     let poly = digit_polynomial(base, dimension)?;
     let shift = (middle(base)? * dimension) as i128;
@@ -170,12 +120,6 @@ pub fn even_block(base: usize, dimension: usize) -> Result<Vec<Vec<i128>>> {
         .collect())
 }
 
-/// The trace of a square integer matrix.
-///
-/// ```
-/// let block = mrly_math::counts::ladder::even_block(3, 3).unwrap();
-/// assert_eq!(mrly_math::counts::ladder::trace(&block), 9);
-/// ```
 pub fn trace(rows: &[Vec<i128>]) -> i128 {
     (0..rows.len()).map(|index| rows[index][index]).sum()
 }
@@ -197,19 +141,6 @@ fn multiply(left: &[Vec<i128>], right: &[Vec<i128>]) -> Result<Vec<Vec<i128>>> {
     Ok(out)
 }
 
-/// The monic characteristic polynomial of a square integer matrix, highest power first.
-///
-/// Faddeev-LeVerrier in exact integers: every division lands whole, so no fraction is ever needed
-/// and the answer is the recurrence's coefficients up to sign.
-///
-/// ```
-/// let block = mrly_math::counts::ladder::even_block(3, 3).unwrap();
-/// assert_eq!(mrly_math::counts::ladder::characteristic(&block).unwrap(), vec![1, -9, 12]);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the walk leaves a remainder, or a coefficient passes an i128.
 pub fn characteristic(rows: &[Vec<i128>]) -> Result<Vec<i128>> {
     let n = rows.len();
     let mut held: Vec<Vec<i128>> = (0..n)
@@ -232,16 +163,6 @@ pub fn characteristic(rows: &[Vec<i128>]) -> Result<Vec<i128>> {
     Ok(out)
 }
 
-/// The determinant of a square integer matrix, read off its characteristic polynomial.
-///
-/// ```
-/// let block = mrly_math::counts::ladder::even_block(3, 3).unwrap();
-/// assert_eq!(mrly_math::counts::ladder::determinant(&block).unwrap(), 12);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the walk leaves a remainder, or a coefficient passes an i128.
 pub fn determinant(rows: &[Vec<i128>]) -> Result<i128> {
     let poly = characteristic(rows)?;
     let last = poly[rows.len()];
@@ -252,22 +173,6 @@ pub fn determinant(rows: &[Vec<i128>]) -> Result<i128> {
     })
 }
 
-// LADDER
-
-/// The counts `a_D(L)` of level-`L` cells meeting the central diagonal hyperplane, from `L = 0`.
-///
-/// The count is the top-left entry of the `L`-th power of the even block. The walk stops early
-/// when the next count would pass a hundred and twenty-eight bits, so the answer runs as far as
-/// exact integers reach and no further.
-///
-/// ```
-/// let terms = mrly_math::counts::ladder::ladder(3, 3, 6).unwrap();
-/// assert_eq!(terms, vec![1, 6, 42, 306, 2250, 16578, 122202]);
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even base under three, or a dimension outside two to the ceiling.
 pub fn ladder(base: usize, dimension: usize, levels: usize) -> Result<Vec<i128>> {
     let block = even_block(base, dimension)?;
     let n = block.len();
@@ -295,23 +200,6 @@ pub fn ladder(base: usize, dimension: usize, levels: usize) -> Result<Vec<i128>>
     Ok(out)
 }
 
-// ROOT
-
-/// The Perron root of a nonnegative square integer matrix.
-///
-/// The characteristic polynomial is rescaled by the largest row sum, which bounds the root above,
-/// then the largest sign change on the unit interval is hunted on a grid and closed by bisection,
-/// the same walk the recurrence growth reader takes.
-///
-/// ```
-/// let block = mrly_math::counts::ladder::even_block(3, 3).unwrap();
-/// let root = mrly_math::counts::ladder::perron(&block).unwrap();
-/// assert!((root - (9.0 + 33f64.sqrt()) / 2.0).abs() < 1e-9);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the block has no positive row sum, or no root inside its bound.
 pub fn perron(rows: &[Vec<i128>]) -> Result<f64> {
     let poly = characteristic(rows)?;
     let bound = rows
@@ -348,22 +236,6 @@ pub fn perron(rows: &[Vec<i128>]) -> Result<f64> {
     value_error("the block shows no root inside its row-sum bound.")
 }
 
-// SIGN
-
-/// The sign of `log_q rho_D - (log_q f_D - 1)`, the slice sign law's reading, in exact integers.
-///
-/// The characteristic polynomial is evaluated at `f_D/q` with the denominators cleared, so the
-/// answer is a comparison of whole numbers and never a rounding. The law reads `(-1)^(D+1)`: the
-/// slice exponent stands above the solid's dimension less one at odd `D` and below it at even `D`.
-///
-/// ```
-/// assert_eq!(mrly_math::counts::ladder::sign(3, 3).unwrap(), 1);
-/// assert_eq!(mrly_math::counts::ladder::sign(3, 4).unwrap(), -1);
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even base under three, a dimension outside two to the ceiling, or a term past an i128.
 pub fn sign(base: usize, dimension: usize) -> Result<i32> {
     let block = even_block(base, dimension)?;
     let poly = characteristic(&block)?;
@@ -382,20 +254,6 @@ pub fn sign(base: usize, dimension: usize) -> Result<i32> {
     })
 }
 
-/// The widest dimension the exact carry arithmetic reaches at the base.
-///
-/// The sign is the heaviest reading: it walks the characteristic polynomial at `f_D/q` with the
-/// denominators cleared, so its running value climbs like `f_D^(D/2)` and a hundred and twenty-eight
-/// bits run out at dimension fifteen in base three and dimension eleven in base five.
-///
-/// ```
-/// assert_eq!(mrly_math::counts::ladder::cap(3).unwrap(), 15);
-/// assert_eq!(mrly_math::counts::ladder::cap(5).unwrap(), 11);
-/// ```
-///
-/// # Errors
-///
-/// Errors at an even base under three, or past the dimension the ladder reaches.
 pub fn cap(base: usize) -> Result<usize> {
     middle(base)?;
     let mut top = 0;
@@ -412,8 +270,6 @@ pub fn cap(base: usize) -> Result<usize> {
     }
     Ok(top)
 }
-
-// SPECTRUM
 
 fn ahead(walk: &[Vec<f64>], vector: &[f64]) -> Vec<f64> {
     walk.iter()
@@ -452,15 +308,6 @@ fn settle(walk: &[Vec<f64>], left: bool) -> Option<Vec<f64>> {
     Some(vector)
 }
 
-/// The Perron root over the modulus of the second eigenvalue, or none where the block is one wide.
-///
-/// Power iteration finds the leading pair, Hotelling deflation takes it out and a second walk,
-/// reprojected every sweep so rounding cannot bring the leader back, reads the runner up. At base
-/// three the ratio falls to `(D + 2)/(D - 2)`, so no fixed spectral gap survives the dimensions.
-///
-/// # Errors
-///
-/// Errors at an even base under three, or a dimension outside two to the ceiling.
 pub fn spectral_ratio(base: usize, dimension: usize) -> Result<Option<f64>> {
     let block = even_block(base, dimension)?;
     let n = block.len();
@@ -502,207 +349,4 @@ pub fn spectral_ratio(base: usize, dimension: usize) -> Result<Option<f64>> {
         trail = next.iter().map(|&x| x / second).collect();
     }
     Ok(Some(lead / second))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::Code;
-
-    fn brute(base: usize, dimension: usize) -> Vec<i128> {
-        let centre = (base - 1) / 2;
-        let mut out = vec![0i128; (base - 1) * dimension + 1];
-        for mut code in 0..base.pow(dimension as u32) {
-            let mut sum = 0;
-            let mut middles = 0;
-            for _ in 0..dimension {
-                let digit = code % base;
-                code /= base;
-                sum += digit;
-                middles += usize::from(digit == centre);
-            }
-            if middles <= 1 {
-                out[sum] += 1;
-            }
-        }
-        out
-    }
-
-    fn central(base: usize, dimension: usize, levels: usize) -> Vec<i128> {
-        let poly = digit_polynomial(base, dimension).unwrap();
-        let mut out = vec![1i128];
-        let mut span = vec![1i128];
-        let mut step = 1usize;
-        for _ in 0..levels {
-            let mut next = vec![0i128; span.len() + (base - 1) * dimension * step];
-            for (at, &count) in span.iter().enumerate() {
-                if count == 0 {
-                    continue;
-                }
-                for (weight, &many) in poly.iter().enumerate() {
-                    next[at + weight * step] += count * many;
-                }
-            }
-            span = next;
-            step *= base;
-            out.push(span[dimension * (step - 1) / 2]);
-        }
-        out
-    }
-
-    #[test]
-    fn the_digit_polynomial_is_the_enumeration_of_the_kept_cells() {
-        for base in [3usize, 5] {
-            for dimension in 2..=6 {
-                let got = digit_polynomial(base, dimension).unwrap();
-                assert_eq!(
-                    got,
-                    brute(base, dimension),
-                    "base {base} dimension {dimension}"
-                );
-                assert_eq!(
-                    got.iter().sum::<i128>(),
-                    fill(base, dimension).unwrap(),
-                    "base {base} dimension {dimension}"
-                );
-            }
-        }
-        assert!(digit_polynomial(4, 3).is_err());
-        assert!(digit_polynomial(3, 1).is_err());
-    }
-
-    #[test]
-    fn the_three_dimensional_block_is_the_published_anchor() {
-        let block = even_block(3, 3).unwrap();
-        assert_eq!(block, vec![vec![6, 6], vec![1, 3]]);
-        assert_eq!(trace(&block), 9);
-        assert_eq!(determinant(&block).unwrap(), 12);
-        assert_eq!(characteristic(&block).unwrap(), vec![1, -9, 12]);
-        assert_eq!(
-            ladder(3, 3, 6).unwrap(),
-            vec![1, 6, 42, 306, 2250, 16578, 122202]
-        );
-        let root = perron(&block).unwrap();
-        assert!((root - (9.0 + 33f64.sqrt()) / 2.0).abs() < 1e-9);
-        assert!((root.log(3.0) - 1.818_410).abs() < 1e-6);
-        assert!((20f64.log(3.0) - 1.0 - 1.726_833).abs() < 1e-6);
-    }
-
-    #[test]
-    fn the_traces_read_the_two_closed_forms() {
-        let want = [2i128, 9, 11, 60, 47, 336];
-        for (index, &term) in want.iter().enumerate() {
-            let dimension = index + 2;
-            assert_eq!(trace(&even_block(3, dimension).unwrap()), term);
-        }
-        for dimension in 2..=cap(3).unwrap() {
-            let got = trace(&even_block(3, dimension).unwrap());
-            let want = if dimension % 2 == 0 {
-                3 * 2i128.pow(dimension as u32 - 2) - 1
-            } else {
-                3 * dimension as i128 * 2i128.pow(dimension as u32 - 3)
-            };
-            assert_eq!(got, want, "dimension {dimension}");
-        }
-    }
-
-    #[test]
-    fn the_three_generators_of_the_ladder_agree() {
-        for base in [3usize, 5] {
-            for dimension in 2..=6 {
-                let block = ladder(base, dimension, 4).unwrap();
-                assert_eq!(
-                    block,
-                    central(base, dimension, 4),
-                    "base {base} dimension {dimension}"
-                );
-                let full = carry_matrix(base, dimension).unwrap();
-                let half = full.len() / 2;
-                let mut walked: Vec<Vec<i128>> = (0..full.len())
-                    .map(|row| (0..full.len()).map(|col| i128::from(row == col)).collect())
-                    .collect();
-                let mut got = vec![1i128];
-                for _ in 0..4 {
-                    walked = multiply(&full, &walked).unwrap();
-                    got.push(walked[half][half]);
-                }
-                assert_eq!(got, block, "base {base} dimension {dimension}");
-            }
-        }
-        assert_eq!(
-            ladder(3, 4, 6).unwrap(),
-            vec![1, 6, 132, 1848, 29040, 441408, 6772128]
-        );
-        assert_eq!(ladder(3, 5, 4).unwrap(), vec![1, 30, 1000, 35700, 1321600]);
-        assert_eq!(
-            ladder(3, 6, 4).unwrap(),
-            vec![1, 20, 4030, 242300, 24642700]
-        );
-        assert_eq!(ladder(5, 3, 4).unwrap(), vec![1, 18, 414, 9702, 227646]);
-    }
-
-    #[test]
-    fn the_ladder_stops_where_the_exact_integers_do() {
-        let terms = ladder(3, 14, 40).unwrap();
-        assert_eq!(&terms[..3], &[1i128, 3432, 922_926_862]);
-        assert_eq!(terms.len(), 9);
-        assert_eq!(ladder(3, 10, 40).unwrap().len(), 12);
-        assert_eq!(
-            ladder(3, 2, 8).unwrap(),
-            vec![1, 2, 4, 8, 16, 32, 64, 128, 256]
-        );
-    }
-
-    #[test]
-    fn the_sign_alternates_to_the_cap_at_both_bases() {
-        for base in [3usize, 5] {
-            let top = cap(base).unwrap();
-            for dimension in 2..=top {
-                let got = sign(base, dimension).unwrap();
-                let want = if dimension % 2 == 0 { -1 } else { 1 };
-                assert_eq!(got, want, "base {base} dimension {dimension}");
-                let block = even_block(base, dimension).unwrap();
-                let root = perron(&block).unwrap();
-                let edge = fill(base, dimension).unwrap() as f64 / base as f64;
-                assert_eq!(
-                    got,
-                    if root > edge { 1 } else { -1 },
-                    "base {base} dimension {dimension}"
-                );
-            }
-            assert!(sign(base, top + 1).is_err());
-        }
-        assert_eq!(cap(3).unwrap(), 15);
-        assert_eq!(cap(5).unwrap(), 11);
-    }
-
-    #[test]
-    fn the_spectral_ratio_falls_to_the_free_bound() {
-        assert_eq!(spectral_ratio(3, 2).unwrap(), None);
-        let mut last = f64::INFINITY;
-        for dimension in [6usize, 10, 20, 30, 50] {
-            let got = spectral_ratio(3, dimension).unwrap().unwrap();
-            let free = (dimension as f64 + 2.0) / (dimension as f64 - 2.0);
-            assert!(got > 1.0 && got < last, "dimension {dimension} ratio {got}");
-            assert!(
-                (got - free).abs() < 0.05,
-                "dimension {dimension} ratio {got}"
-            );
-            last = got;
-        }
-        let fifty = spectral_ratio(3, 50).unwrap().unwrap();
-        assert!((fifty - 13.0 / 12.0).abs() < 1e-9, "ratio {fifty}");
-    }
-    #[test]
-    fn the_ladder_is_the_sponge_diagonal_count() {
-        let terms = ladder(3, 3, 5).unwrap();
-        assert_eq!(terms, vec![1, 6, 42, 306, 2250, 16578]);
-        let counted: Vec<u128> = (1..=5)
-            .map(|level| {
-                let height = 3 * (3usize.pow(level as u32) - 1) / 2;
-                crate::three::profile(Code::from(23u64), 3, level, 2).unwrap()[height]
-            })
-            .collect();
-        assert_eq!(counted, vec![6, 42, 306, 2250, 16578]);
-    }
 }

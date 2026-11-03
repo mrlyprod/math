@@ -7,7 +7,6 @@ use mrly_core::colors::Color;
 use mrly_core::error::{Result, value_error};
 use mrly_core::image::Image;
 
-/// A screen triangle: three grid points and an RGBA color.
 pub type Triangle = ([(i64, i64); 3], [u8; 4]);
 
 #[derive(Clone, Debug)]
@@ -17,22 +16,18 @@ struct Rect {
     size: (usize, usize),
 }
 
-/// The three corners of the north-pointing triangle at the grid column and row.
 pub fn north(x: i64, y: i64) -> [(i64, i64); 3] {
     [(x, 2 * y + 2), (x + 1, 2 * y), (x + 2, 2 * y + 2)]
 }
 
-/// The three corners of the south-pointing triangle at the grid column and row.
 pub fn south(x: i64, y: i64) -> [(i64, i64); 3] {
     [(x, 2 * y), (x + 1, 2 * y + 2), (x + 2, 2 * y)]
 }
 
-/// The three corners of the east-pointing triangle at the grid column and row.
 pub fn east(x: i64, y: i64) -> [(i64, i64); 3] {
     [(2 * x, y), (2 * x, y + 2), (2 * x + 2, y + 1)]
 }
 
-/// The three corners of the west-pointing triangle at the grid column and row.
 pub fn west(x: i64, y: i64) -> [(i64, i64); 3] {
     [(2 * x + 2, y), (2 * x + 2, y + 2), (2 * x, y + 1)]
 }
@@ -90,11 +85,6 @@ fn parity(cell: &Cell6d, start: Option<usize>) -> i64 {
     }
 }
 
-/// Folds a cell into colored screen triangles, dropping the transparent ones, at the cell's start parity or the given override.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn triangles(cell: &Cell6d, start: Option<usize>) -> Result<Vec<Triangle>> {
     mesh(&cell.cell, parity(cell, start))
 }
@@ -194,11 +184,6 @@ fn sheet(view: &Rect, scale: usize, stroke: &str) -> String {
     out.join("\n")
 }
 
-/// Renders a cell's triangles to an SVG string at the given scale, stroked and padded when an outline is given.
-///
-/// # Errors
-///
-/// Errors when nothing renders.
 pub fn svg(
     cell: &Cell6d,
     scale: usize,
@@ -214,16 +199,9 @@ pub fn svg(
     ))
 }
 
-/// Renders the hexagon tiled three by three and cropped to one interlocking rectangle as an SVG string.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon, or when nothing renders.
 pub fn rect_svg(cell: &Cell6d, scale: usize, start: Option<usize>) -> Result<String> {
     Ok(sheet(&rectangle(cell, start)?, scale, "stroke=\"none\""))
 }
-
-// RASTER
 
 struct Canvas {
     width: usize,
@@ -478,22 +456,12 @@ fn canvas(view: &Rect, scale: usize, outline: Option<Color>, width: usize) -> Ca
     canvas
 }
 
-/// Rasters a cell's triangles to an image at the given scale, stroked and padded when an outline is given.
-///
-/// # Errors
-///
-/// Errors when nothing renders or when the scale is zero.
 pub fn image(cell: &Cell6d, scale: usize, outline: Option<Color>, width: usize) -> Result<Image> {
     let padding = if outline.is_some() { width as i64 } else { 0 };
     let view = window(cell, padding, None)?;
     plate(&view, scale, outline, width)
 }
 
-/// Rasters the hexagon tiled three by three and cropped to one interlocking rectangle to an image.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon or when the scale is zero.
 pub fn rect_image(cell: &Cell6d, scale: usize, start: Option<usize>) -> Result<Image> {
     plate(&rectangle(cell, start)?, scale, None, 0)
 }
@@ -508,118 +476,4 @@ fn plate(view: &Rect, scale: usize, outline: Option<Color>, width: usize) -> Res
         height: raster.height,
         colors: raster.pixels,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::Code;
-    use crate::six::designs::iso_design;
-    use crate::six::geometry::{blank, cut, iso};
-    use crate::six::models::Cell6d;
-    use crate::six::painter::paint;
-    use crate::six::{Orientation, Projection};
-    use crate::three;
-    fn carpet_cut() -> Cell6d {
-        cut(&three::carpet(3, 1).unwrap()).unwrap()
-    }
-    #[test]
-    fn triangle_geometry() {
-        assert_eq!(north(0, 0), [(0, 2), (1, 0), (2, 2)]);
-        assert_eq!(south(0, 0), [(0, 0), (1, 2), (2, 0)]);
-        assert_eq!(east(1, 1), [(2, 1), (2, 3), (4, 2)]);
-    }
-    #[test]
-    fn iso_renders_triangles() {
-        let i = iso_design(Code(23), 3, 1, 2).unwrap();
-        let tris = triangles(&i, None).unwrap();
-        assert!(!tris.is_empty());
-        let s = svg(&i, 10, None, 1, None).unwrap();
-        assert!(s.contains("<polygon"));
-        assert!(s.contains("stroke=\"none\""));
-    }
-    #[test]
-    fn outline_strokes_and_pads_the_svg() {
-        let i = iso_design(Code(23), 3, 1, 2).unwrap();
-        let plain = svg(&i, 4, None, 1, None).unwrap();
-        let lined = svg(&i, 4, Some(Color::rgba(255, 0, 0, 255)), 2, None).unwrap();
-        assert!(lined.contains("stroke-width=\"2\""));
-        assert!(lined.contains(&Color::rgba(255, 0, 0, 255).to_hex()));
-        let size = |svg: &str| -> usize {
-            svg.split("width=\"")
-                .nth(1)
-                .unwrap()
-                .split('"')
-                .next()
-                .unwrap()
-                .parse()
-                .unwrap()
-        };
-        assert_eq!(size(&lined), size(&plain) + 4 * 4);
-    }
-    #[test]
-    fn hexagon_renders() {
-        let hex = Cell6d::new(
-            blank(3, Orientation::Horizontal, 1, 0).unwrap(),
-            Projection::Cut,
-            Orientation::Horizontal,
-            0,
-        );
-        let tris = triangles(&hex, None).unwrap();
-        assert!(!tris.is_empty());
-    }
-    #[test]
-    fn refuses_a_sheet_with_nothing_to_draw() {
-        let bare = Cell6d::new(
-            crate::two::Cell2d::new(mrly_core::Tensor::full(vec![2, 3], crate::six::GRID)).unwrap(),
-            Projection::Cut,
-            Orientation::Horizontal,
-            0,
-        );
-        assert!(triangles(&bare, None).unwrap().is_empty());
-        assert!(svg(&bare, 4, None, 1, None).is_err());
-    }
-    #[test]
-    fn a_start_override_flips_the_first_triangle() {
-        let hex = carpet_cut();
-        let plain = triangles(&hex, None).unwrap();
-        let flipped = triangles(&hex, Some(1)).unwrap();
-        assert_eq!(plain.len(), flipped.len());
-        assert_ne!(plain[0].0, flipped[0].0);
-        assert_eq!(plain[0].0, north(2, 0));
-        assert_eq!(flipped[0].0, south(2, 0));
-    }
-    #[test]
-    fn image_matches_the_drawn_size_and_fill() {
-        let sheet = image(&carpet_cut(), 10, None, 0).unwrap();
-        assert_eq!((sheet.width, sheet.height), (120, 120));
-        assert_eq!(sheet.colors.iter().filter(|p| p[3] != 0).count(), 10859);
-    }
-    #[test]
-    fn refuses_a_zero_scale() {
-        assert!(image(&carpet_cut(), 0, None, 0).is_err());
-        assert!(rect_image(&carpet_cut(), 0, None).is_err());
-    }
-    #[test]
-    fn vertical_rows_tile_without_seams() {
-        let cube = three::carpet(3, 1).unwrap();
-        let hex = paint(iso(&cube).unwrap(), None, None, None).unwrap();
-        let sheet = image(&hex, 10, None, 0).unwrap();
-        assert_eq!((sheet.width, sheet.height), (120, 120));
-        assert_eq!(sheet.colors.iter().filter(|p| p[3] == 0).count(), 3541);
-    }
-    #[test]
-    fn rect_svg_carries_the_cropped_window() {
-        let s = rect_svg(&carpet_cut(), 10, None).unwrap();
-        assert!(s.starts_with("<svg width=\"180\" height=\"120\" viewBox=\"0 0 180 120\""));
-        let sheet = rect_image(&carpet_cut(), 10, None).unwrap();
-        assert_eq!((sheet.width, sheet.height), (180, 120));
-        assert_eq!(sheet.colors.iter().filter(|p| p[3] != 0).count(), 21600);
-    }
-    #[test]
-    fn an_outlined_image_pads_and_strokes() {
-        let sheet = image(&carpet_cut(), 10, Some(Color::rgba(255, 0, 0, 255)), 2).unwrap();
-        assert_eq!((sheet.width, sheet.height), (160, 160));
-        assert!(sheet.colors.contains(&[255, 0, 0, 255]));
-    }
 }

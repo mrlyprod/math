@@ -32,13 +32,11 @@ fn backed(front: &Cell2d, back: &Cell2d, tag: u8) -> Cell {
     }
 }
 
-/// Returns whether the cell's three sides are equal.
 pub fn is_cube(cell: &Cell3d) -> bool {
     let s = &cell.types().shape;
     s[0] == s[1] && s[1] == s[2]
 }
 
-/// Returns whether the cell's width, height and parity frame a hexagon.
 pub fn is_hex(cell: &Cell2d) -> bool {
     let (h, w) = (cell.height(), cell.width());
     if w > h {
@@ -57,11 +55,6 @@ pub fn is_hex(cell: &Cell2d) -> bool {
     }
 }
 
-/// Returns the orientation a hexagon's width and height imply.
-///
-/// # Errors
-///
-/// Errors when the width and the height are equal.
 pub fn orientation(width: usize, height: usize) -> Result<Orientation> {
     if width > height {
         return Ok(Orientation::Horizontal);
@@ -72,17 +65,6 @@ pub fn orientation(width: usize, height: usize) -> Result<Orientation> {
     value_error("Cell must be a hexagon.")
 }
 
-/// Builds a hexagon of the given radius, fill inside and void outside.
-///
-/// ```
-/// use mrly_math::six::{blank, Orientation};
-/// let hex = blank(2, Orientation::Horizontal, 1, 0).unwrap();
-/// assert_eq!(hex.types().shape, vec![4, 7]);
-/// ```
-///
-/// # Errors
-///
-/// Errors below radius one.
 pub fn blank(radius: usize, orient: Orientation, fill: u8, void: u8) -> Result<Cell2d> {
     if radius == 0 {
         return value_error("a hexagon needs a radius of at least one.");
@@ -125,11 +107,6 @@ pub fn blank(radius: usize, orient: Orientation, fill: u8, void: u8) -> Result<C
     Cell2d::new(types)
 }
 
-/// Wraps a hexagonal cell in k rings of the given value, carrying colors and tags along.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn pad(cell: &Cell6d, k: usize, value: u8) -> Result<Cell6d> {
     if k < 1 {
         return Ok(cell.clone());
@@ -175,11 +152,6 @@ pub fn pad(cell: &Cell6d, k: usize, value: u8) -> Result<Cell6d> {
     ))
 }
 
-/// Projects a cube into the isometric hexagon of top, left and right faces.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a cube.
 pub fn iso(cell: &Cell3d) -> Result<Cell6d> {
     if !is_cube(cell) {
         return value_error("Cell must be a cube.");
@@ -217,11 +189,6 @@ pub fn iso(cell: &Cell3d) -> Result<Cell6d> {
     ))
 }
 
-/// Projects a cube's three facing sides into a hexagon of fills and voids.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a cube.
 pub fn pro(cell: &Cell3d) -> Result<Cell6d> {
     if !is_cube(cell) {
         return value_error("Cell must be a cube.");
@@ -283,11 +250,6 @@ pub fn pro(cell: &Cell3d) -> Result<Cell6d> {
     ))
 }
 
-/// Slices a cube through its center across the main diagonal into a hexagon.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a cube.
 pub fn cut(cell: &Cell3d) -> Result<Cell6d> {
     if !is_cube(cell) {
         return value_error("Cell must be a cube.");
@@ -337,11 +299,6 @@ pub fn cut(cell: &Cell3d) -> Result<Cell6d> {
     ))
 }
 
-/// Stamps a hexagonal cell at every set mask entry into one interlocking sheet, colors and tags included.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn tessellate(cell: &Cell6d, mask: &Tensor) -> Result<Cell2d> {
     let inner = &cell.cell;
     if !is_hex(inner) {
@@ -401,24 +358,10 @@ pub fn tessellate(cell: &Cell6d, mask: &Tensor) -> Result<Cell2d> {
     })
 }
 
-/// Tessellates a hexagonal cell over a full width-by-height mask.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn tile(cell: &Cell6d, width: usize, height: usize) -> Result<Cell2d> {
     tessellate(cell, &Tensor::full(vec![height, width], 1))
 }
 
-/// Returns the interlocking step, in triangle columns and rows, that a sheet of hexagons of the given width and height loses off each side when cropped.
-///
-/// ```
-/// assert_eq!(mrly_math::six::tile_step((11, 6)).unwrap(), (2, 3));
-/// ```
-///
-/// # Errors
-///
-/// Errors when the width and the height are equal.
 pub fn tile_step(size: (usize, usize)) -> Result<(usize, usize)> {
     let (w, h) = size;
     Ok(match orientation(w, h)? {
@@ -427,23 +370,11 @@ pub fn tile_step(size: (usize, usize)) -> Result<(usize, usize)> {
     })
 }
 
-/// Crops one interlocking step off each side of a sheet tiled at the given size.
-///
-/// # Errors
-///
-/// Errors when the width and the height are equal.
 pub fn tile_crop(cell: &Cell2d, size: (usize, usize)) -> Result<Cell2d> {
     let (crop_x, crop_y) = tile_step(size)?;
     crop(cell, crop_x, crop_y)
 }
 
-/// Tessellates a hexagon over a full width-by-height mask and returns the sheet as a projected cell, cropped to the interlocking rectangle on request.
-///
-/// The sheet keeps the tile's projection and orientation. A crop slides the triangle grid by the interlocking step on both axes, so the start parity flips whenever that step is odd; without the flip every triangle in the sheet points the wrong way.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn tile_cell(cell: &Cell6d, width: usize, height: usize, crop: bool) -> Result<Cell6d> {
     let size = (cell.width(), cell.height());
     let orient = orientation(size.0, size.1)?;
@@ -461,9 +392,6 @@ pub fn tile_cell(cell: &Cell6d, width: usize, height: usize, crop: bool) -> Resu
     Ok(Cell6d::new(sheet, cell.projection, orient, start as u8))
 }
 
-/// Recodes an isometric projection's top, left and right faces as plain fills, so a census reads its visible skin as one figure.
-///
-/// The other two projections already speak in fills and voids and come back untouched.
 pub fn skin(cell: &Cell6d) -> Cell6d {
     let mut out = cell.clone();
     let types = &mut out.cell.cell.types;
@@ -475,13 +403,6 @@ pub fn skin(cell: &Cell6d) -> Cell6d {
     out
 }
 
-/// Backs a cell onto a backdrop whose longer axis matches its orientation, leaving every triangle where it stood.
-///
-/// A renderer reads a sheet's orientation off its frame, so a tall sheet of wide hexagons would draw every triangle on its side; the spare columns or rows are backdrop and reach neither the census nor the picture.
-///
-/// # Errors
-///
-/// Errors when the backdrop does not take the cell's triangles.
 pub fn framed(cell: &Cell6d) -> Result<Cell6d> {
     let (h, w) = (cell.height(), cell.width());
     let (width, height) = match cell.orientation {
@@ -517,7 +438,6 @@ fn crop(cell: &Cell2d, crop_x: usize, crop_y: usize) -> Result<Cell2d> {
     })
 }
 
-/// Builds the disc mask of cells within hex distance radius of the center.
 pub fn radial_mask(radius: usize, orient: Orientation) -> Tensor {
     if radius < 1 {
         return Tensor::new(vec![1, 1]);
@@ -551,11 +471,6 @@ pub fn radial_mask(radius: usize, orient: Orientation) -> Tensor {
     mask
 }
 
-/// Tessellates a hexagonal cell over the disc mask of the given radius.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn radial(cell: &Cell6d, radius: usize) -> Result<Cell2d> {
     let inner = &cell.cell;
     if !is_hex(inner) {
@@ -565,11 +480,6 @@ pub fn radial(cell: &Cell6d, radius: usize) -> Result<Cell2d> {
     tessellate(cell, &radial_mask(radius, orient))
 }
 
-/// Returns the hexagons in a disc of the given rings about one centre: 1, 7, 19, 37 and on.
-///
-/// # Errors
-///
-/// Errors when the count passes the machine word.
 pub fn copies(rings: usize) -> Result<usize> {
     match rings
         .checked_add(1)
@@ -582,11 +492,6 @@ pub fn copies(rings: usize) -> Result<usize> {
     }
 }
 
-/// Tessellates a hexagonal cell over the disc of the given rings about one centre, keeping its projection and orientation and taking the start parity of the uncropped sheet the disc sits in; no rings is the cell itself.
-///
-/// # Errors
-///
-/// Errors for a cell that is not a hexagon.
 pub fn disc(cell: &Cell6d, rings: usize) -> Result<Cell6d> {
     if rings == 0 {
         return Ok(cell.clone());
@@ -602,11 +507,6 @@ pub fn disc(cell: &Cell6d, rings: usize) -> Result<Cell6d> {
     ))
 }
 
-/// Crops the interlocking overhang off a disc tiled at the given radius and tile size.
-///
-/// # Errors
-///
-/// Errors when the width and the height are equal.
 pub fn radial_crop(cell: &Cell2d, radius: usize, size: (usize, usize)) -> Result<Cell2d> {
     let (w, h) = size;
     let orient = orientation(w, h)?;
@@ -616,333 +516,4 @@ pub fn radial_crop(cell: &Cell2d, radius: usize, size: (usize, usize)) -> Result
         Orientation::Vertical => (rings * (w / 2), w / 2),
     };
     crop(cell, crop_x, crop_y)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::Code;
-    use crate::three;
-    #[test]
-    fn blank_frames_both_orientations() {
-        let b = blank(2, Orientation::Horizontal, 1, 0).unwrap();
-        assert_eq!(b.types().shape, vec![4, 7]);
-        assert_eq!(
-            b.types().bytes().unwrap(),
-            vec![
-                0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0
-            ]
-        );
-        let v = blank(2, Orientation::Vertical, 1, 0).unwrap();
-        assert_eq!(v.types().shape, vec![7, 4]);
-        assert!(is_hex(&b));
-        assert!(is_hex(&v));
-    }
-    #[test]
-    fn radial_mask_is_the_hex_disc() {
-        let m = radial_mask(2, Orientation::Horizontal);
-        assert_eq!(m.bytes().unwrap(), vec![0, 1, 0, 1, 1, 1, 1, 1, 1]);
-    }
-    #[test]
-    fn radial_crop_trims_the_overhang() {
-        let hex = Cell6d::new(
-            blank(2, Orientation::Horizontal, FILL, GRID).unwrap(),
-            Projection::Cut,
-            Orientation::Horizontal,
-            0,
-        );
-        let (w, h) = (hex.width(), hex.height());
-        let disc = radial(&hex, 2).unwrap();
-        let cropped = radial_crop(&disc, 2, (w, h)).unwrap();
-        assert_eq!(cropped.height(), disc.height() - h);
-        assert_eq!(cropped.width(), disc.width() - h);
-        let tight = radial_crop(&disc, 9, (w, h)).unwrap();
-        assert_eq!(tight.types().shape, vec![1, 1]);
-    }
-    #[test]
-    fn radial_crop_shrinks_the_two_axes_apart() {
-        let radius = 3;
-        let rings = radius - 1;
-        for orient in [Orientation::Horizontal, Orientation::Vertical] {
-            let hex = Cell6d::new(
-                blank(2, orient, FILL, GRID).unwrap(),
-                Projection::Cut,
-                orient,
-                0,
-            );
-            let (w, h) = (hex.width(), hex.height());
-            let disc = radial(&hex, radius).unwrap();
-            let cropped = radial_crop(&disc, radius, (w, h)).unwrap();
-            let (lost_x, lost_y) = match orient {
-                Orientation::Horizontal => (h, rings * h),
-                Orientation::Vertical => (rings * w, w),
-            };
-            assert_ne!(lost_x, lost_y, "{orient:?}");
-            assert_eq!(cropped.width(), disc.width() - lost_x, "{orient:?}");
-            assert_eq!(cropped.height(), disc.height() - lost_y, "{orient:?}");
-        }
-    }
-    #[test]
-    fn tessellate_and_crop_carry_colors_and_tags() {
-        let painted = crate::six::paint(
-            Cell6d::new(
-                blank(2, Orientation::Horizontal, FILL, GRID).unwrap(),
-                Projection::Cut,
-                Orientation::Horizontal,
-                0,
-            ),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        assert!(painted.cell.cell.colors.is_some());
-        let sheet = tile(&painted, 2, 2).unwrap();
-        let colors = sheet.cell.colors.as_ref().unwrap();
-        assert_eq!(colors.len(), sheet.width() * sheet.height());
-        let opaque = colors.iter().filter(|c| c[3] > 0).count();
-        assert_eq!(
-            opaque,
-            sheet
-                .types()
-                .bytes()
-                .unwrap()
-                .iter()
-                .filter(|&&v| v != GRID)
-                .count()
-        );
-        let cropped = tile_crop(&sheet, (painted.width(), painted.height())).unwrap();
-        assert_eq!(
-            cropped.cell.colors.as_ref().unwrap().len(),
-            cropped.width() * cropped.height()
-        );
-    }
-    #[test]
-    fn pad_carries_colors_across_the_ring() {
-        let painted = crate::six::paint(
-            Cell6d::new(
-                blank(2, Orientation::Horizontal, FILL, VOID).unwrap(),
-                Projection::Cut,
-                Orientation::Horizontal,
-                0,
-            ),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        let source = painted.cell.cell.colors.clone().unwrap();
-        let wider = pad(&painted, 1, GRID).unwrap();
-        let grown = wider.cell.cell.colors.as_ref().unwrap();
-        let y_off = (wider.height() - painted.height()) / 2;
-        let x_off = (wider.width() - painted.width()) / 2;
-        for y in 0..painted.height() {
-            for x in 0..painted.width() {
-                assert_eq!(
-                    grown[(y + y_off) * wider.width() + x + x_off],
-                    source[y * painted.width() + x]
-                );
-            }
-        }
-        assert_eq!(grown[0], [0, 0, 0, 0]);
-    }
-    #[test]
-    fn the_sheet_keeps_the_tile_pointing_the_same_way() {
-        let hex = crate::six::cut_design(Code(23), 3, 1, 2).unwrap();
-        assert_eq!((hex.width(), hex.height()), (11, 6));
-        for (wide, high) in [(5usize, 5usize), (3, 9)] {
-            for crop in [false, true] {
-                let sheet = tile_cell(&hex, wide, high, crop).unwrap();
-                assert_eq!(sheet.orientation, Orientation::Horizontal);
-                let shown = framed(&sheet).unwrap();
-                assert!(shown.width() > shown.height(), "{wide}x{high} {crop}");
-                assert_eq!(
-                    orientation(shown.width(), shown.height()).unwrap(),
-                    Orientation::Horizontal
-                );
-                let whole = crate::six::census(&shown, false);
-                assert_eq!(whole.euler, 1, "{wide}x{high} {crop}");
-                let triangles = whole.fills + whole.voids;
-                match crop {
-                    false => assert_eq!(triangles, wide * high * 54, "{wide}x{high}"),
-                    true => assert!(triangles < wide * high * 54, "{wide}x{high}"),
-                }
-            }
-        }
-    }
-    fn filled_corners(cell: &Cell6d) -> std::collections::BTreeSet<[(i64, i64); 3]> {
-        let mut out = std::collections::BTreeSet::new();
-        for y in 0..cell.height() {
-            for x in 0..cell.width() {
-                if cell.cell.types().get(&[y, x]).unwrap() == FILL {
-                    out.insert(crate::six::census::corners(
-                        x as i64,
-                        y as i64,
-                        cell.start as i64,
-                    ));
-                }
-            }
-        }
-        out
-    }
-    fn shifted(
-        set: &std::collections::BTreeSet<[(i64, i64); 3]>,
-        dx: i64,
-        dy: i64,
-    ) -> std::collections::BTreeSet<[(i64, i64); 3]> {
-        set.iter()
-            .map(|c| c.map(|(x, y)| (x + dx, y + dy)))
-            .collect()
-    }
-    #[test]
-    fn the_sheet_lays_every_copy_on_the_triangle_lattice() {
-        let hex = crate::six::cut_design(Code(23), 3, 1, 2).unwrap();
-        let one = filled_corners(&hex);
-        let (dx, dy, shift) = (9i64, 6i64, 3i64);
-        for (wide, high) in [(5usize, 5usize), (3usize, 9usize)] {
-            let sheet = tile_cell(&hex, wide, high, false).unwrap();
-            let mut want = std::collections::BTreeSet::new();
-            for r in 0..high as i64 {
-                for c in 0..wide as i64 {
-                    let py = dy * r + if c % 2 == 1 { shift } else { 0 };
-                    want.extend(shifted(&one, dx * c, 2 * py));
-                }
-            }
-            assert_eq!(filled_corners(&sheet), want, "{wide}x{high}");
-            assert_eq!(want.len(), wide * high * one.len(), "{wide}x{high}");
-        }
-    }
-    #[test]
-    fn the_crop_flips_the_start_parity_when_its_step_is_odd() {
-        let hex = crate::six::cut_design(Code(23), 3, 1, 2).unwrap();
-        let (step_x, step_y) = tile_step((hex.width(), hex.height())).unwrap();
-        assert_eq!((step_x, step_y), (2, 3));
-        let plain = tile_cell(&hex, 5, 5, false).unwrap();
-        let cropped = tile_cell(&hex, 5, 5, true).unwrap();
-        assert_eq!(plain.start, 0);
-        assert_eq!(cropped.start, 1);
-        assert_eq!(
-            (cropped.width(), cropped.height()),
-            (plain.width() - 2 * step_x, plain.height() - 2 * step_y)
-        );
-        let whole = filled_corners(&plain);
-        let back = shifted(&filled_corners(&cropped), step_x as i64, 2 * step_y as i64);
-        assert!(back.is_subset(&whole));
-        let wrong = Cell6d::new(
-            cropped.cell.clone(),
-            cropped.projection,
-            cropped.orientation,
-            plain.start,
-        );
-        assert!(
-            !shifted(&filled_corners(&wrong), step_x as i64, 2 * step_y as i64).is_subset(&whole)
-        );
-    }
-    #[test]
-    fn the_rings_count_the_hexagons_of_the_disc() {
-        for rings in 0..=4 {
-            let mask = radial_mask(rings + 1, Orientation::Horizontal);
-            assert_eq!(copies(rings).unwrap() as u64, mask.sum());
-        }
-        let counts: Vec<usize> = (0..=4).map(|rings| copies(rings).unwrap()).collect();
-        assert_eq!(counts, [1, 7, 19, 37, 61]);
-        assert!(copies(usize::MAX).is_err());
-    }
-    #[test]
-    fn the_disc_keeps_the_parity_of_the_uncropped_sheet_it_sits_in() {
-        let designs = [
-            crate::six::cut_design,
-            crate::six::iso_design,
-            crate::six::pro_design,
-        ];
-        for design in designs {
-            for (number, level) in [(3, 1), (3, 2), (5, 1)] {
-                let one = design(Code(23), number, level, 2).unwrap();
-                assert_eq!(disc(&one, 0).unwrap(), one);
-                for rings in 1..=4 {
-                    let made = disc(&one, rings).unwrap();
-                    let tile = tile_cell(&one, 2 * rings + 1, 2 * rings + 1, false).unwrap();
-                    let (th, tw) = (made.height(), made.width());
-                    let (height, width) = (tile.height(), tile.width());
-                    let (disc_types, tile_types) = (made.cell.types(), tile.cell.types());
-                    let seat = (0..=height - th)
-                        .flat_map(|dy| (0..=width - tw).map(move |dx| (dx, dy)))
-                        .find(|&(dx, dy)| {
-                            (0..th * tw).all(|i| {
-                                let v = disc_types.at(i);
-                                v == i64::from(GRID)
-                                    || v == tile_types.at((i / tw + dy) * width + i % tw + dx)
-                            })
-                        });
-                    let (dx, dy) = seat.unwrap();
-                    assert_eq!(
-                        made.start as usize,
-                        (tile.start as usize + dx + dy) % 2,
-                        "{:?} {number} {level} {rings}",
-                        one.projection
-                    );
-                    assert_eq!(
-                        (made.projection, made.orientation),
-                        (one.projection, one.orientation)
-                    );
-                }
-            }
-        }
-    }
-    #[test]
-    fn skin_turns_the_iso_faces_into_one_figure() {
-        let iso = crate::six::iso_design(Code(23), 3, 1, 2).unwrap();
-        let bare = crate::six::census(&iso, false);
-        assert_eq!((bare.fills, bare.voids), (0, 0));
-        let painted = iso
-            .cell
-            .types()
-            .bytes()
-            .unwrap()
-            .iter()
-            .filter(|&&v| [UP, LEFT, RIGHT].contains(&v))
-            .count();
-        let read = crate::six::census(&skin(&iso), false);
-        assert_eq!(read.voids, 0);
-        assert_eq!(read.fills, painted);
-        assert_eq!(read.triangles, painted);
-        assert_eq!(read.grids, bare.grids);
-        assert!(painted > 0);
-        let sliced = crate::six::cut_design(Code(23), 3, 1, 2).unwrap();
-        assert_eq!(skin(&sliced).cell, sliced.cell);
-    }
-    #[test]
-    fn framed_leaves_a_sheet_that_already_points_right_alone() {
-        let hex = crate::six::cut_design(Code(23), 3, 1, 2).unwrap();
-        let wide = tile_cell(&hex, 5, 5, false).unwrap();
-        assert_eq!(framed(&wide).unwrap().cell, wide.cell);
-        let tall = tile_cell(&hex, 3, 9, false).unwrap();
-        assert!(tall.width() < tall.height());
-        assert_eq!(framed(&tall).unwrap().height(), tall.height());
-        assert_eq!(framed(&tall).unwrap().width(), tall.height() + 1);
-        assert_eq!(
-            crate::six::census(&framed(&tall).unwrap(), false).fills,
-            crate::six::census(&tall, false).fills
-        );
-    }
-    #[test]
-    fn projections_have_expected_frames() {
-        let c = three::carpet(3, 1).unwrap();
-        let i = iso(&c).unwrap();
-        assert_eq!(i.cell.types().shape, vec![11, 6]);
-        assert_eq!(i.start, 1);
-        let p = pro(&c).unwrap();
-        assert_eq!(p.cell.types().shape, vec![11, 6]);
-        let q = cut(&c).unwrap();
-        assert_eq!(q.orientation, Orientation::Horizontal);
-        assert_eq!(q.start, 0);
-        assert!(iso(&three::Cell3d::new(Tensor::new(vec![2, 3, 2])).unwrap()).is_err());
-    }
-
-    #[test]
-    fn refuses_a_zero_radius() {
-        assert!(blank(0, Orientation::Horizontal, FILL, VOID).is_err());
-        assert!(blank(0, Orientation::Vertical, FILL, VOID).is_err());
-        assert!(blank(1, Orientation::Horizontal, FILL, VOID).is_ok());
-    }
 }

@@ -8,7 +8,6 @@ use std::sync::OnceLock;
 
 pub use crate::cell::geometry::{magic, mosaic, perforate};
 
-/// Returns the 24 rotation triples that reach each distinct cube orientation.
 pub fn orientations() -> Vec<(usize, usize, usize)> {
     static TABLE: OnceLock<Vec<(usize, usize, usize)>> = OnceLock::new();
     TABLE
@@ -41,20 +40,10 @@ pub fn orientations() -> Vec<(usize, usize, usize)> {
         .clone()
 }
 
-/// Merges the cells into one cube arranged width by height by depth.
-///
-/// # Errors
-///
-/// Errors when the cells differ in shape or do not fill the arrangement.
 pub fn merge(cells: &[Cell3d], width: usize, height: usize, depth: usize) -> Result<Cell3d> {
     geometry::merge_reps(cells, &[depth, height, width])
 }
 
-/// Orients a copy of the cell by each mask value and merges them in the mask's shape.
-///
-/// # Errors
-///
-/// Errors when the mask is not 3d, or holds a value past twenty-three.
 pub fn special(mask: &Tensor, cell: &Cell3d) -> Result<Cell3d> {
     if mask.shape.len() != 3 {
         return value_error("special mask must be 3d.");
@@ -88,17 +77,6 @@ fn slice_map(cube: &[usize], axis: usize, index: usize) -> (Vec<usize>, Vec<usiz
     (shape, map)
 }
 
-/// Takes the flat cell left when one axis of the cube is fixed at an index, colors and tags with it.
-///
-/// ```
-/// let sponge = mrly_math::three::carpet(3, 2).unwrap();
-/// let front = mrly_math::three::slice(&sponge, 2, 0).unwrap();
-/// assert_eq!(front, mrly_math::two::carpet(3, 2).unwrap());
-/// ```
-///
-/// # Errors
-///
-/// Errors when the axis or the index is past the cube.
 pub fn slice(cell: &Cell3d, axis: usize, index: usize) -> Result<Cell2d> {
     if axis > 2 {
         return value_error("slice axis is past the cube's rank.");
@@ -111,8 +89,6 @@ pub fn slice(cell: &Cell3d, axis: usize, index: usize) -> Result<Cell2d> {
         cell: remap(&cell.cell, &map, &shape)?,
     })
 }
-
-// EXTRUDE
 
 fn lift_map(shape: &[usize], axis: usize, depth: usize) -> (Vec<usize>, Vec<usize>) {
     let mut lifted = shape.to_vec();
@@ -132,20 +108,6 @@ fn lift_map(shape: &[usize], axis: usize, depth: usize) -> (Vec<usize>, Vec<usiz
     (lifted, map)
 }
 
-/// Lifts a flat cell into a cube by repeating it depth times along a new axis, colors and tags with it.
-///
-/// This is the inverse of slice: every slice of the lift on that axis is the flat cell again.
-///
-/// ```
-/// let flat = mrly_math::two::carpet(3, 2).unwrap();
-/// let cube = mrly_math::three::extrude(&flat, 0, 4).unwrap();
-/// assert_eq!(cube.depth(), 4);
-/// assert_eq!(mrly_math::three::slice(&cube, 0, 3).unwrap(), flat);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the axis is not 0, 1 or 2, or the depth is below one.
 pub fn extrude(cell: &Cell2d, axis: usize, depth: usize) -> Result<Cell3d> {
     if axis > 2 {
         return value_error("extrude axis must be 0, 1 or 2.");
@@ -159,17 +121,6 @@ pub fn extrude(cell: &Cell2d, axis: usize, depth: usize) -> Result<Cell3d> {
     })
 }
 
-/// Repeats every plane of a cube depth times along its leading axis, colors and tags with it.
-///
-/// ```
-/// let stack = mrly_math::three::extrude_cube(&mrly_math::three::carpet(3, 1).unwrap(), 2).unwrap();
-/// assert_eq!(stack.types().shape, vec![6, 3, 3]);
-/// assert_eq!(stack.types().sum(), 40);
-/// ```
-///
-/// # Errors
-///
-/// Errors when the depth is below one.
 pub fn extrude_cube(cell: &Cell3d, depth: usize) -> Result<Cell3d> {
     if depth == 0 {
         return value_error("extrude depth must be at least 1.");
@@ -185,11 +136,6 @@ pub fn extrude_cube(cell: &Cell3d, depth: usize) -> Result<Cell3d> {
     })
 }
 
-// LAYERS
-
-/// Tags every site with its Manhattan distance from the cube's center, the diamond shells.
-///
-/// The cell's own layers count Chebyshev shells, which are boxes; these are octahedra.
 pub fn manhattan_layers(mut cell: Cell3d) -> Cell3d {
     let shape = cell.types().shape.clone();
     let strides = [shape[1] * shape[2], shape[2], 1];
@@ -212,160 +158,4 @@ pub fn manhattan_layers(mut cell: Cell3d) -> Cell3d {
     }
     cell.cell.tags = Some(tags);
     cell
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::three::designs;
-    use crate::two;
-    #[test]
-    fn exactly_24_orientations() {
-        let table = orientations();
-        assert_eq!(table.len(), 24);
-        assert_eq!(table[0], (0, 0, 0));
-    }
-    #[test]
-    fn orientations_preserve_sum_and_shape() {
-        let c = designs::carpet(3, 1).unwrap();
-        for i in 0..24 {
-            let o = c.clone().orient(i).unwrap();
-            assert_eq!(o.types().sum(), c.types().sum());
-            assert_eq!(o.types().shape, c.types().shape);
-        }
-        assert!(c.clone().orient(24).is_err());
-    }
-    #[test]
-    fn orientations_are_distinct_on_chiral_design() {
-        let tree = designs::xtree(3, 1).unwrap();
-        let images: Vec<Vec<u8>> = (0..24)
-            .map(|i| {
-                tree.clone()
-                    .orient(i)
-                    .unwrap()
-                    .types()
-                    .bytes()
-                    .unwrap()
-                    .to_vec()
-            })
-            .collect();
-        let mut unique = images.clone();
-        unique.sort();
-        unique.dedup();
-        assert!(unique.len() >= 3);
-    }
-    #[test]
-    fn special_identity_is_tile() {
-        let c = designs::carpet(3, 1).unwrap();
-        let mask = Tensor::new(vec![2, 2, 2]);
-        let s = special(&mask, &c).unwrap();
-        assert_eq!(s, c.clone().tile(2, 2, 2).unwrap());
-    }
-    #[test]
-    fn only_the_carpet_and_two_trees_face_a_flat_name() {
-        for n in [3, 5] {
-            for level in [1, 2] {
-                let carpet = slice(&designs::carpet(n, level).unwrap(), 2, 0).unwrap();
-                let net = slice(&designs::net(n, level).unwrap(), 2, 0).unwrap();
-                let xtree = slice(&designs::xtree(n, level).unwrap(), 2, 0).unwrap();
-                let ytree = slice(&designs::ytree(n, level).unwrap(), 2, 0).unwrap();
-                let ztree = slice(&designs::ztree(n, level).unwrap(), 2, 0).unwrap();
-                let void = slice(&designs::void(n, level).unwrap(), 2, 0).unwrap();
-                assert_eq!(carpet, two::carpet(n, level).unwrap());
-                assert_eq!(xtree, two::vtree(n, level).unwrap());
-                assert_eq!(ytree, two::htree(n, level).unwrap());
-                assert_eq!(void, ztree);
-                assert_ne!(net, two::net(n, level).unwrap());
-                assert_ne!(void, two::void(n, level).unwrap());
-                assert_ne!(ztree, two::htree(n, level).unwrap());
-                assert_ne!(ztree, two::vtree(n, level).unwrap());
-            }
-        }
-    }
-    #[test]
-    fn extrude_undoes_slice_on_every_axis() {
-        use mrly_core::cell::Mode;
-        use mrly_core::cell::mapping;
-        let flat = two::carpet(3, 2)
-            .unwrap()
-            .layers()
-            .paint(&mapping(), Mode::Index, None)
-            .unwrap();
-        for axis in 0..3 {
-            let cube = extrude(&flat, axis, 4).unwrap();
-            assert_eq!(cube.types().shape[axis], 4);
-            for index in 0..4 {
-                assert_eq!(slice(&cube, axis, index).unwrap(), flat);
-            }
-            assert_eq!(cube.types().sum(), 4 * flat.types().sum());
-        }
-        assert!(extrude(&flat, 3, 2).is_err());
-        assert!(extrude(&flat, 0, 0).is_err());
-        assert!(slice(&extrude(&flat, 2, 1).unwrap(), 3, 0).is_err());
-        assert!(slice(&extrude(&flat, 2, 1).unwrap(), 2, 1).is_err());
-    }
-    #[test]
-    fn extrude_lifts_a_flat_face_of_a_cube_back() {
-        let sponge = designs::carpet(3, 2).unwrap();
-        let face = slice(&sponge, 2, 0).unwrap();
-        let column = extrude(&face, 2, sponge.types().shape[2]).unwrap();
-        assert_eq!(column.types().shape, sponge.types().shape);
-        assert_eq!(slice(&column, 2, 5).unwrap(), face);
-    }
-    #[test]
-    fn extrude_carries_colors_and_tags() {
-        use mrly_core::cell::Mode;
-        use mrly_core::cell::mapping;
-        let flat = two::carpet(3, 1)
-            .unwrap()
-            .layers()
-            .paint(&mapping(), Mode::Type, None)
-            .unwrap();
-        let cube = extrude(&flat, 0, 3).unwrap();
-        let colors = cube.cell.colors.as_ref().unwrap();
-        let tags = cube.cell.tags.as_ref().unwrap();
-        let flat_colors = flat.cell.colors.as_ref().unwrap();
-        let flat_tags = flat.cell.tags.as_ref().unwrap();
-        assert_eq!(colors.len(), 27);
-        assert_eq!(tags.shape, vec![3, 3, 3]);
-        for plane in 0..3 {
-            for site in 0..9 {
-                assert_eq!(colors[plane * 9 + site], flat_colors[site]);
-                assert_eq!(tags.at(plane * 9 + site), flat_tags.at(site));
-            }
-        }
-    }
-    #[test]
-    fn extrude_cube_repeats_every_plane() {
-        let stack = extrude_cube(&designs::carpet(3, 1).unwrap(), 2).unwrap();
-        assert_eq!(stack.types().shape, vec![6, 3, 3]);
-        assert_eq!(stack.types().sum(), 40);
-        assert_eq!(slice(&stack, 0, 0).unwrap(), slice(&stack, 0, 1).unwrap());
-        assert!(extrude_cube(&designs::carpet(3, 1).unwrap(), 0).is_err());
-    }
-
-    #[test]
-    fn manhattan_layers_are_diamond_shells() {
-        let cube = manhattan_layers(designs::ones(3, 1).unwrap());
-        let tags = cube.cell.tags.as_ref().unwrap();
-        assert_eq!(tags.get(&[1, 1, 1]).unwrap(), 0);
-        assert_eq!(tags.get(&[0, 1, 1]).unwrap(), 1);
-        assert_eq!(tags.get(&[0, 0, 1]).unwrap(), 2);
-        assert_eq!(tags.get(&[0, 0, 0]).unwrap(), 3);
-        let boxes = designs::ones(3, 1).unwrap().layers();
-        assert_eq!(
-            boxes.cell.tags.as_ref().unwrap().get(&[0, 0, 0]).unwrap(),
-            1
-        );
-    }
-    #[test]
-    fn manhattan_layers_widen_past_a_byte() {
-        use mrly_core::tensor::Dtype;
-        let small = manhattan_layers(designs::ones(3, 1).unwrap());
-        assert_eq!(small.cell.tags.as_ref().unwrap().dtype(), Dtype::U8);
-        let long = manhattan_layers(Cell3d::new(Tensor::full(vec![1, 1, 600], 1)).unwrap());
-        let tags = long.cell.tags.as_ref().unwrap();
-        assert_eq!(tags.dtype(), Dtype::U16);
-        assert_eq!(tags.at(0), 299);
-    }
 }

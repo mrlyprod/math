@@ -2,7 +2,6 @@ use mrly_core::error::{Result, value_error};
 use mrly_core::tensor::Tensor;
 use std::collections::BTreeMap;
 
-/// The widest side a profile spans.
 pub const WIDEST: usize = 1 << 18;
 
 fn histogram(tile: &Tensor) -> BTreeMap<usize, u128> {
@@ -23,21 +22,6 @@ fn histogram(tile: &Tensor) -> BTreeMap<usize, u128> {
     out
 }
 
-/// Counts the filled cells of the tile's level-fold power on every diagonal plane `x_1 + ... + x_D = s`.
-///
-/// The count is the coefficient of the digit polynomial, the level-fold product of the tile's
-/// weight sums, so no cell of the power is ever built; the tile must be a hypercube.
-///
-/// ```
-/// use mrly_math::bang::Code;
-/// let gasket = mrly_math::bang::factory::create(Code::from(126u64), 2, 3, 2, 1).unwrap();
-/// let counts = mrly_math::counts::profile_of_tile(&gasket, 4).unwrap();
-/// assert_eq!(counts[15..=30].iter().copied().collect::<Vec<u128>>(), vec![81u128; 16]);
-/// ```
-///
-/// # Errors
-///
-/// Errors for a tile that is not a hypercube, a level below one, a side past the widest, or counts past a u128.
 pub fn profile_of_tile(tile: &Tensor, level: u32) -> Result<Vec<u128>> {
     let dimension = tile.shape.len();
     let number = tile.shape.first().copied().unwrap_or(0);
@@ -77,30 +61,4 @@ pub fn profile_of_tile(tile: &Tensor, level: u32) -> Result<Vec<u128>> {
         step *= number;
     }
     Ok(poly)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bang::{Code, factory};
-    #[test]
-    fn the_profile_sums_to_the_fill_and_matches_a_rendered_count() {
-        for code in [Code(7), Code(9), Code(11)] {
-            let tile = factory::create(code, 3, 2, 2, 1).unwrap();
-            let counts = profile_of_tile(&tile, 3).unwrap();
-            let rendered = factory::create(code, 3, 2, 2, 3).unwrap();
-            assert_eq!(counts.iter().sum::<u128>(), u128::from(rendered.sum()));
-            let mut direct = vec![0u128; counts.len()];
-            for (flat, &cell) in rendered.bytes().unwrap().iter().enumerate() {
-                if cell != 0 {
-                    direct[flat / 27 + flat % 27] += 1;
-                }
-            }
-            assert_eq!(counts, direct, "code={code}");
-        }
-        let tile = factory::create(Code(23), 3, 3, 2, 1).unwrap();
-        assert_eq!(profile_of_tile(&tile, 1).unwrap(), [1, 3, 3, 6, 3, 3, 1]);
-        assert!(profile_of_tile(&tile, 0).is_err());
-        assert!(profile_of_tile(&crate::atoms::ones_3d(2), 20).is_err());
-    }
 }

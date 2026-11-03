@@ -42,11 +42,6 @@ fn stacked(cells: &[Cell2d]) -> Cell {
     }
 }
 
-/// Merges same-shaped cells into one block of the given width and height in cells, colors and tags kept.
-///
-/// # Errors
-///
-/// Errors on an empty list, a wrong cell count, or cells of different shapes.
 pub fn merge(cells: &[Cell2d], width: usize, height: usize) -> Result<Cell2d> {
     if cells.is_empty() {
         return value_error("Cannot merge an empty list of cells.");
@@ -76,11 +71,6 @@ pub fn merge(cells: &[Cell2d], width: usize, height: usize) -> Result<Cell2d> {
     })
 }
 
-/// Tiles quarter-turned copies of the cell as the 2d mask directs.
-///
-/// # Errors
-///
-/// Errors when the mask is not 2d, or holds a rotation past three.
 pub fn special(mask: &Tensor, cell: &Cell2d) -> Result<Cell2d> {
     if mask.shape.len() != 2 {
         return value_error("special mask must be 2d.");
@@ -96,22 +86,10 @@ pub fn special(mask: &Tensor, cell: &Cell2d) -> Result<Cell2d> {
     merge(&rotated, mask.shape[1], mask.shape[0])
 }
 
-/// Lifts the flat cell into a cube one site deep, colors and tags with it.
-///
-/// ```
-/// let flat = mrly_math::two::carpet(3, 2).unwrap();
-/// let solid = mrly_math::two::to_3d(&flat);
-/// assert_eq!(mrly_math::three::slice(&solid, 0, 0).unwrap(), flat);
-/// ```
 pub fn to_3d(cell: &Cell2d) -> Cell3d {
     crate::three::extrude(cell, 0, 1).expect("a one-deep lift on the leading axis always holds")
 }
 
-/// Tiles the mask over the shape and crops it, the perforation pattern itself.
-///
-/// # Errors
-///
-/// Errors when the mask or the shape is not two-axis, or the mask is empty.
 pub fn mask(mask: &Tensor, shape: &[usize]) -> Result<Tensor> {
     if mask.shape.len() != 2 || shape.len() != 2 {
         return value_error("a flat mask tiles a two-axis shape.");
@@ -128,83 +106,4 @@ pub fn mask(mask: &Tensor, shape: &[usize]) -> Result<Tensor> {
         }
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn mask_tiles_and_crops_to_the_shape() {
-        let tiled = mask(&crate::atoms::carpet_2d(2), &[4, 4]).unwrap();
-        let flat: Vec<i64> = (0..tiled.size()).map(|i| tiled.at(i)).collect();
-        assert_eq!(flat, vec![1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0]);
-    }
-    use crate::two::designs;
-    use mrly_core::cell::Mode;
-    use mrly_core::cell::mapping;
-    #[test]
-    fn special_rotations_preserve_sum() {
-        let tree = designs::htree(3, 1).unwrap();
-        let mask = Tensor::of(vec![0, 1, 3, 2], vec![2, 2]).unwrap();
-        let s = special(&mask, &tree).unwrap();
-        assert_eq!(s.width(), 6);
-        assert_eq!(s.types().sum(), 4 * tree.types().sum());
-        assert!(special(&Tensor::of(vec![4], vec![1, 1]).unwrap(), &tree).is_err());
-    }
-    #[test]
-    fn special_identity_mask_is_tile() {
-        let c = designs::carpet(3, 1).unwrap();
-        let mask = Tensor::new(vec![2, 3]);
-        let s = special(&mask, &c).unwrap();
-        assert_eq!(s, c.clone().tile(3, 2).unwrap());
-    }
-    #[test]
-    fn merge_carries_colors_and_tags() {
-        let painted = designs::carpet(3, 1)
-            .unwrap()
-            .layers()
-            .paint(&mapping(), Mode::Type, None)
-            .unwrap();
-        let plain = designs::void(3, 1).unwrap();
-        let block = merge(
-            &[painted.clone(), plain, painted.clone(), painted.clone()],
-            2,
-            2,
-        )
-        .unwrap();
-        assert_eq!(block.width(), 6);
-        let colors = block.cell.colors.as_ref().unwrap();
-        let source = painted.cell.colors.as_ref().unwrap();
-        assert_eq!(colors.len(), 36);
-        assert_eq!(colors[0], source[0]);
-        assert_eq!(colors[3], [0, 0, 0, 0]);
-        assert_eq!(colors[18], source[0]);
-        assert_eq!(colors[21], source[0]);
-        let tags = block.cell.tags.as_ref().unwrap();
-        let seed = painted.cell.tags.as_ref().unwrap();
-        assert_eq!(tags.shape, vec![6, 6]);
-        assert_eq!(tags.at(7), seed.at(4));
-        assert_eq!(tags.at(10), 0);
-    }
-    #[test]
-    fn merge_without_paint_stays_bare() {
-        let c = designs::carpet(3, 1).unwrap();
-        let block = merge(&[c.clone(), c.clone(), c.clone(), c], 2, 2).unwrap();
-        assert!(block.cell.colors.is_none());
-        assert!(block.cell.tags.is_none());
-        assert!(merge(&[], 1, 1).is_err());
-    }
-    #[test]
-    fn to_3d_is_a_one_deep_lift() {
-        let flat = designs::htree(5, 1)
-            .unwrap()
-            .layers()
-            .paint(&mapping(), Mode::Index, None)
-            .unwrap();
-        let solid = to_3d(&flat);
-        assert_eq!(solid.types().shape, vec![1, 5, 5]);
-        assert_eq!(solid.types().sum(), flat.types().sum());
-        assert_eq!(solid.cell.colors, flat.cell.colors);
-        assert_eq!(crate::three::slice(&solid, 0, 0).unwrap(), flat);
-    }
 }

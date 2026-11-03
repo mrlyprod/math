@@ -140,7 +140,6 @@ dependencies = [
  "mrly-num",
  "pyo3",
  "serde",
- "serde_json",
  "wasm-bindgen",
 ]
 
